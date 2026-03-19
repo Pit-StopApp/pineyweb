@@ -538,51 +538,51 @@ function IntakeForm() {
 /* ─── Footer ────────────────────────────────────────────────────────────── */
 function Footer() {
   return (
-    <footer className="bg-gray-900 text-gray-300 py-16 px-6">
+    <footer className="py-16 px-6" style={{ backgroundColor: '#F5F0E8' }}>
       <div className="max-w-6xl mx-auto">
         <div className="grid md:grid-cols-3 gap-12 mb-12">
           <div>
-            <h3 className="text-xl font-bold text-white mb-4">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">
               Piney Web Co.
             </h3>
-            <p className="text-sm leading-relaxed text-gray-400">
+            <p className="text-sm leading-relaxed text-gray-600">
               Professional web design and digital marketing for East Texas small
               businesses. Based in Longview, serving the entire piney woods
               region.
             </p>
           </div>
           <div>
-            <h4 className="font-semibold text-white mb-4 text-sm uppercase tracking-wider">
+            <h4 className="font-semibold text-gray-900 mb-4 text-sm uppercase tracking-wider">
               Quick Links
             </h4>
-            <ul className="space-y-2 text-sm">
+            <ul className="space-y-2 text-sm text-gray-600">
               <li>
-                <a href="#pricing" className="hover:text-pine-400 transition-colors">
+                <a href="#pricing" className="hover:text-pine-700 transition-colors">
                   Pricing
                 </a>
               </li>
               <li>
-                <a href="#portfolio" className="hover:text-pine-400 transition-colors">
+                <a href="#portfolio" className="hover:text-pine-700 transition-colors">
                   Portfolio
                 </a>
               </li>
               <li>
-                <a href="#contact" className="hover:text-pine-400 transition-colors">
+                <a href="#contact" className="hover:text-pine-700 transition-colors">
                   Contact
                 </a>
               </li>
             </ul>
           </div>
           <div>
-            <h4 className="font-semibold text-white mb-4 text-sm uppercase tracking-wider">
+            <h4 className="font-semibold text-gray-900 mb-4 text-sm uppercase tracking-wider">
               Contact
             </h4>
-            <ul className="space-y-2 text-sm">
+            <ul className="space-y-2 text-sm text-gray-600">
               <li>Longview, TX</li>
               <li>
                 <a
                   href="mailto:hello@pineyweb.com"
-                  className="hover:text-pine-400 transition-colors"
+                  className="hover:text-pine-700 transition-colors"
                 >
                   hello@pineyweb.com
                 </a>
@@ -590,11 +590,11 @@ function Footer() {
             </ul>
           </div>
         </div>
-        <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="border-t border-gray-300 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-sm text-gray-500">
             &copy; {new Date().getFullYear()} Piney Web Co. All rights reserved.
           </p>
-          <p className="text-sm italic text-gray-400">
+          <p className="text-sm italic text-gray-500">
             Your customers are searching. Are you there?
           </p>
         </div>
