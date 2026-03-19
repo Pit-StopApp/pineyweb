@@ -98,12 +98,13 @@ function Hero() {
       <div className="max-w-4xl mx-auto text-center">
         <div className="mb-8 flex justify-center">
           <Image
-            src="/logo.png"
+            src="/PINEYWEBLOGO.png"
             alt="Piney Web Co."
             width={280}
             height={280}
             className="rounded-2xl"
             priority
+            unoptimized
           />
         </div>
         <h1 className="text-4xl md:text-5xl lg:text-6xl leading-tight mb-10">
@@ -383,6 +384,7 @@ function Portfolio() {
                   src={p.image}
                   alt={p.name}
                   fill
+                  unoptimized
                   className="object-cover group-hover:scale-105 transition-transform duration-500"
                 />
               </div>
