@@ -379,13 +379,13 @@ function Portfolio() {
               rel="noopener noreferrer"
               className="group bg-white rounded-xl border border-gray-100 overflow-hidden hover:border-pine-200 hover:shadow-lg transition-all"
             >
-              <div className="aspect-video bg-gray-100 relative overflow-hidden">
+              <div className="h-[200px] bg-gray-100 relative overflow-hidden">
                 <Image
                   src={p.image}
                   alt={p.name}
                   fill
                   unoptimized
-                  className="object-cover group-hover:scale-105 transition-transform duration-500"
+                  className="object-contain group-hover:scale-105 transition-transform duration-500"
                 />
               </div>
               <div className="p-6">
