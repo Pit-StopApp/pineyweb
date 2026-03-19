@@ -31,7 +31,7 @@ export default function DashboardHome() {
         .single();
 
       if (data) {
-        if (data.status === "pending") { router.push("/activate"); return; }
+        if (data.status === "pending") { router.push("/?pending=1"); return; }
         setProfile(data);
       } else {
         setProfile({

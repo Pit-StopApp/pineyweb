@@ -18,7 +18,7 @@ export default function EditSite() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push("/login"); return; }
       const { data } = await supabase.from("pineyweb_clients").select("business_name, status").eq("user_id", session.user.id).single();
-      if (data?.status === "pending") { router.push("/activate"); return; }
+      if (data?.status === "pending") { router.push("/?pending=1"); return; }
       setBusinessName(data?.business_name || session.user.user_metadata?.business_name || "");
       setLoading(false);
     };

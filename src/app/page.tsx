@@ -1,11 +1,40 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { Suspense, useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 export default function Home() {
   return (
+    <Suspense>
+      <HomeInner />
+    </Suspense>
+  );
+}
+
+function HomeInner() {
+  const searchParams = useSearchParams();
+  const [showPendingBanner, setShowPendingBanner] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    const checkPending = async () => {
+      if (searchParams.get("pending") === "1") {
+        setShowPendingBanner(true);
+        return;
+      }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const { data } = await supabase.from("pineyweb_clients").select("status").eq("user_id", session.user.id).single();
+      if (data?.status === "pending") setShowPendingBanner(true);
+    };
+    checkPending();
+  }, [searchParams]);
+
+  return (
     <div className="min-h-screen bg-white">
+      {showPendingBanner && !dismissed && <PendingBanner onDismiss={() => setDismissed(true)} />}
       <Navbar />
       <Hero />
       <WhyPineyWeb />
@@ -13,6 +42,26 @@ export default function Home() {
       <Portfolio />
       <IntakeForm />
       <Footer />
+    </div>
+  );
+}
+
+/* ─── Pending Activation Banner ─────────────────────────────────────────── */
+function PendingBanner({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div className="fixed top-0 left-0 right-0 z-[60] flex items-center justify-between px-4 md:px-8 py-3 text-white text-sm" style={{ backgroundColor: "#8B5E3C" }}>
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <span className="flex-shrink-0">&#9888;&#65039;</span>
+        <span className="truncate">Your account is pending activation. Enter your order confirmation number to unlock your client dashboard.</span>
+      </div>
+      <div className="flex items-center gap-3 flex-shrink-0 ml-4">
+        <a href="/activate" className="px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider border border-white/40 hover:bg-white/10 transition-colors whitespace-nowrap">
+          Activate Now
+        </a>
+        <button onClick={onDismiss} className="p-1 hover:opacity-70 transition-opacity" aria-label="Dismiss">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
     </div>
   );
 }
