@@ -412,209 +412,112 @@ function Portfolio() {
   );
 }
 
-/* ─── Intake Form ───────────────────────────────────────────────────────── */
+/* ─── Quick Inquiry Form ─────────────────────────────────────────────────── */
 function IntakeForm() {
-  const [submitted, setSubmitted] = useState(false);
+  const [form, setForm] = useState({ name: "", business: "", phone: "", email: "", message: "" });
+  const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitted(true);
+  const set = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm((prev) => ({ ...prev, [field]: e.target.value }));
+
+  const handleSubmit = async () => {
+    if (!form.name.trim() || !form.email.trim()) return;
+    setStatus("sending");
+    setErrorMsg("");
+    try {
+      const res = await fetch("https://api.web3forms.com/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          access_key: process.env.NEXT_PUBLIC_WEB3FORMS_KEY,
+          subject: `New inquiry from ${form.name} — ${form.business || "No business name"}`,
+          from_name: form.name,
+          name: form.name,
+          business_name: form.business,
+          phone: form.phone,
+          email: form.email,
+          message: form.message,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStatus("success");
+        setForm({ name: "", business: "", phone: "", email: "", message: "" });
+      } else {
+        setErrorMsg(data.message || "Something went wrong. Please try again.");
+        setStatus("error");
+      }
+    } catch {
+      setErrorMsg("Network error. Please check your connection and try again.");
+      setStatus("error");
+    }
   };
+
+  const inputClass =
+    "w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-pine-500 focus:border-transparent outline-none transition-shadow text-sm";
 
   return (
     <section id="contact" className="py-20 px-6">
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-xl mx-auto">
         <div className="text-center mb-12">
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-            Start Your Project
+            Get In Touch
           </h2>
           <p className="text-gray-600">
-            Tell us about your business and we&apos;ll get back to you within 24
-            hours with a free consultation.
+            Tell us about your business and we&apos;ll get back to you within 24 hours.
           </p>
         </div>
 
-        {submitted ? (
+        {status === "success" ? (
           <div className="bg-pine-50 border border-pine-200 rounded-xl p-8 text-center">
             <div className="text-4xl mb-4">🎉</div>
-            <h3 className="text-2xl font-bold text-pine-800 mb-2">
-              Thank you!
-            </h3>
+            <h3 className="text-2xl font-bold text-pine-800 mb-2">Thank you!</h3>
             <p className="text-pine-700">
-              We&apos;ve received your project details and will be in touch within 24
-              hours.
+              We&apos;ve received your message and will be in touch within 24 hours.
             </p>
           </div>
         ) : (
-          <form
-            onSubmit={handleSubmit}
-            className="bg-white rounded-xl border border-gray-100 p-8 space-y-6 shadow-sm"
-          >
+          <div className="bg-white rounded-xl border border-gray-100 p-8 space-y-5 shadow-sm">
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Owner Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-pine-500 focus:border-transparent outline-none transition-shadow text-sm"
-                  placeholder="Dustin Hartman"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+                <input type="text" value={form.name} onChange={set("name")} placeholder="Dustin Hartman" className={inputClass} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Business Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-pine-500 focus:border-transparent outline-none transition-shadow text-sm"
-                  placeholder="Your Business Name"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Business Name</label>
+                <input type="text" value={form.business} onChange={set("business")} placeholder="Your Business Name" className={inputClass} />
               </div>
             </div>
-
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  required
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-pine-500 focus:border-transparent outline-none transition-shadow text-sm"
-                  placeholder="you@business.com"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                <input type="tel" value={form.phone} onChange={set("phone")} placeholder="(903) 555-0123" className={inputClass} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone
-                </label>
-                <input
-                  type="tel"
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-pine-500 focus:border-transparent outline-none transition-shadow text-sm"
-                  placeholder="(903) 555-0123"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                <input type="email" value={form.email} onChange={set("email")} placeholder="you@business.com" className={inputClass} />
               </div>
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Business Address
-              </label>
-              <input
-                type="text"
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-pine-500 focus:border-transparent outline-none transition-shadow text-sm"
-                placeholder="123 Main St, Longview, TX 75601"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+              <textarea rows={4} value={form.message} onChange={set("message")} placeholder="Tell us about your project or ask us anything..." className={`${inputClass} resize-vertical`} />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Business Hours
-              </label>
-              <input
-                type="text"
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-pine-500 focus:border-transparent outline-none transition-shadow text-sm"
-                placeholder="Mon-Fri 8am-5pm, Sat 9am-1pm"
-              />
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Current Website (if any)
-                </label>
-                <input
-                  type="url"
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-pine-500 focus:border-transparent outline-none transition-shadow text-sm"
-                  placeholder="https://..."
-                />
+            {status === "error" && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+                {errorMsg}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Industry / Type of Business *
-                </label>
-                <input
-                  type="text"
-                  required
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-pine-500 focus:border-transparent outline-none transition-shadow text-sm"
-                  placeholder="Auto repair, restaurant, etc."
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Color Preferences
-              </label>
-              <input
-                type="text"
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-pine-500 focus:border-transparent outline-none transition-shadow text-sm"
-                placeholder="Blue and white, match my logo, no preference, etc."
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                What do you need? *
-              </label>
-              <select
-                required
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-pine-500 focus:border-transparent outline-none transition-shadow text-sm bg-white"
-              >
-                <option value="">Select one...</option>
-                <option value="new">New website from scratch</option>
-                <option value="redesign">Redesign existing website</option>
-                <option value="seo">SEO / get found on Google</option>
-                <option value="maintenance">Website maintenance</option>
-                <option value="other">Something else</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Tell us about your project
-              </label>
-              <textarea
-                rows={4}
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-pine-500 focus:border-transparent outline-none transition-shadow text-sm resize-vertical"
-                placeholder="What does your business do? What are your goals for the website? Any specific features you need?"
-              />
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Logo Upload
-                </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-pine-50 file:text-pine-700 hover:file:bg-pine-100 cursor-pointer"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Photo Uploads
-                </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-pine-50 file:text-pine-700 hover:file:bg-pine-100 cursor-pointer"
-                />
-              </div>
-            </div>
+            )}
 
             <button
-              type="submit"
-              className="w-full py-3.5 rounded-full bg-pine-700 text-white font-medium hover:bg-pine-800 transition-colors text-base"
+              onClick={handleSubmit}
+              disabled={status === "sending" || !form.name.trim() || !form.email.trim()}
+              className="w-full py-3.5 rounded-full bg-pine-700 text-white font-medium hover:bg-pine-800 transition-colors text-base disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Submit Project Inquiry
+              {status === "sending" ? "Sending..." : "Send Message"}
             </button>
-          </form>
+          </div>
         )}
       </div>
     </section>
