@@ -44,10 +44,16 @@ function Navbar() {
             </a>
           ))}
           <a
-            href="#contact"
+            href="/login"
+            className="text-sm font-medium text-gray-600 hover:text-pine-700 transition-colors"
+          >
+            Login
+          </a>
+          <a
+            href="/signup"
             className="text-sm font-medium px-5 py-2 rounded-full bg-pine-700 text-white hover:bg-pine-800 transition-colors"
           >
-            Get Started
+            Sign Up
           </a>
         </div>
 
@@ -79,11 +85,16 @@ function Navbar() {
             </a>
           ))}
           <a
-            href="#contact"
-            onClick={() => setOpen(false)}
+            href="/login"
+            className="block text-sm font-medium text-gray-600 hover:text-pine-700"
+          >
+            Login
+          </a>
+          <a
+            href="/signup"
             className="block text-sm font-medium text-pine-700"
           >
-            Get Started
+            Sign Up
           </a>
         </div>
       )}
