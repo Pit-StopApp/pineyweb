@@ -170,14 +170,14 @@ function Pricing() {
   ];
 
   const enhancements = [
+    { name: "Booking Calendar", price: "$250" },
+    { name: "Photo Gallery", price: "$100" },
+    { name: "Google Reviews Widget", price: "$75" },
+    { name: "Email Newsletter Signup", price: "$100" },
+    { name: "Basic E-commerce", price: "$400" },
     { name: "Logo Design", price: "$150" },
-    { name: "Professional Copywriting (per page)", price: "$75" },
-    { name: "Google Ads Setup & First Campaign", price: "$200" },
-    { name: "Social Media Profile Setup (per platform)", price: "$50" },
-    { name: "E-commerce / Online Ordering", price: "$300+" },
-    { name: "Photography Session (on-location)", price: "$250" },
-    { name: "Custom Domain & Email Setup", price: "$50" },
-    { name: "Additional Pages (per page)", price: "$75" },
+    { name: "SEO Setup", price: "$150" },
+    { name: "Custom Form", price: "$100" },
   ];
 
   return (
