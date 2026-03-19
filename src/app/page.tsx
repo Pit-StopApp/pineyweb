@@ -482,7 +482,7 @@ function IntakeForm() {
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
-                <input type="text" value={form.name} onChange={set("name")} placeholder="Dustin Hartman" className={inputClass} />
+                <input type="text" value={form.name} onChange={set("name")} placeholder="John Smith" className={inputClass} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Business Name</label>
@@ -492,7 +492,7 @@ function IntakeForm() {
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                <input type="tel" value={form.phone} onChange={set("phone")} placeholder="(903) 555-0123" className={inputClass} />
+                <input type="tel" value={form.phone} onChange={set("phone")} placeholder="(555) 555-0123" className={inputClass} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
