@@ -20,6 +20,16 @@ export default function Dashboard() {
   const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
+    (window as any).$crisp = [];
+    (window as any).CRISP_WEBSITE_ID = "3def2b4b-d5cd-4179-8c56-b86ecf6e45d6";
+    const script = document.createElement("script");
+    script.src = "https://client.crisp.chat/l.js";
+    script.async = true;
+    document.head.appendChild(script);
+    return () => { script.remove(); };
+  }, []);
+
+  useEffect(() => {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
