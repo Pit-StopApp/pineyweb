@@ -198,7 +198,7 @@ function WhyPineyWeb() {
 function Pricing() {
   const tiers = [
     {
-      name: "Tier 2: Build & Own",
+      name: "One-Time",
       price: "$799",
       period: "one-time",
       desc: "We design and build your site, then hand it off. You own the code and hosting.",
@@ -215,13 +215,13 @@ function Pricing() {
       recommended: false,
     },
     {
-      name: "Tier 3: Build & Manage",
+      name: "Managed",
       price: "$299",
       priceSetup: "$99/mo",
       period: "setup",
       desc: "We build, host, and manage your site month-to-month. Cancel anytime.",
       features: [
-        "Everything in Build & Own",
+        "Everything in One-Time",
         "Managed hosting & SSL",
         "Monthly content updates",
         "Ongoing SEO optimization",
