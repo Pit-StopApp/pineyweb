@@ -8,7 +8,6 @@ export default function Home() {
     <div className="min-h-screen bg-white">
       <Navbar />
       <Hero />
-      <Services />
       <Pricing />
       <Portfolio />
       <IntakeForm />
@@ -21,7 +20,6 @@ export default function Home() {
 function Navbar() {
   const [open, setOpen] = useState(false);
   const links = [
-    { href: "#services", label: "Services" },
     { href: "#pricing", label: "Pricing" },
     { href: "#portfolio", label: "Portfolio" },
     { href: "#contact", label: "Contact" },
@@ -30,11 +28,10 @@ function Navbar() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100">
       <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-        <a href="#" className="font-serif text-xl font-bold text-pine-800">
+        <a href="#" className="text-xl font-bold text-pine-800">
           Piney Web Co.
         </a>
 
-        {/* Desktop links */}
         <div className="hidden md:flex items-center gap-8">
           {links.map((l) => (
             <a
@@ -53,7 +50,6 @@ function Navbar() {
           </a>
         </div>
 
-        {/* Mobile hamburger */}
         <button
           onClick={() => setOpen(!open)}
           className="md:hidden p-2 text-gray-600"
@@ -69,7 +65,6 @@ function Navbar() {
         </button>
       </div>
 
-      {/* Mobile menu */}
       {open && (
         <div className="md:hidden bg-white border-t border-gray-100 px-6 py-4 space-y-3">
           {links.map((l) => (
@@ -110,14 +105,11 @@ function Hero() {
             priority
           />
         </div>
-        <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight mb-6">
-          Websites Built for{" "}
-          <span className="text-pine-700">East Texas</span> Businesses
+        <h1 className="text-4xl md:text-5xl lg:text-6xl leading-tight mb-10">
+          <span className="font-bold text-sage-700">Your customers are searching.</span>
+          <br />
+          <span className="italic text-leather-600">Are you there?</span>
         </h1>
-        <p className="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto mb-10">
-          Your customers are already searching online. We build fast, modern
-          websites that make sure they find you first — not your competition.
-        </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <a
             href="#contact"
@@ -137,132 +129,62 @@ function Hero() {
   );
 }
 
-/* ─── Services ──────────────────────────────────────────────────────────── */
-function Services() {
-  const services = [
+/* ─── Pricing ───────────────────────────────────────────────────────────── */
+function Pricing() {
+  const tiers = [
     {
-      icon: "🎨",
-      title: "Custom Web Design",
-      desc: "Unique designs tailored to your brand — no cookie-cutter templates. Mobile-first so your site looks great on every device.",
+      name: "Tier 2: Build & Own",
+      price: "$499",
+      period: "one-time",
+      desc: "We design and build your site, then hand it off. You own the code and hosting.",
+      features: [
+        "Custom multi-page website",
+        "Mobile responsive design",
+        "Contact form integration",
+        "Basic SEO setup",
+        "Google Business Profile setup",
+        "Source code delivered to you",
+        "30 days of post-launch support",
+      ],
+      cta: "Get Started",
+      recommended: false,
     },
     {
-      icon: "🔍",
-      title: "Local SEO",
-      desc: "Get found on Google when locals search for your services. Google Business Profile optimization, local keywords, and schema markup.",
-    },
-    {
-      icon: "⚡",
-      title: "Fast & Reliable Hosting",
-      desc: "Lightning-fast load times on modern infrastructure. SSL certificates, daily backups, and 99.9% uptime guaranteed.",
-    },
-    {
-      icon: "🛠️",
-      title: "Ongoing Support",
-      desc: "We don't disappear after launch. Content updates, security patches, and performance monitoring — all included.",
-    },
-    {
-      icon: "📱",
-      title: "Social Media Integration",
-      desc: "Connect your website to your social accounts, embed feeds, and make it easy for customers to share your content.",
-    },
-    {
-      icon: "📊",
-      title: "Analytics & Reporting",
-      desc: "Know exactly how your site is performing. Monthly reports on traffic, search rankings, and customer engagement.",
+      name: "Tier 3: Build & Manage",
+      price: "$199",
+      priceSetup: "$99/mo",
+      period: "setup",
+      desc: "We build, host, and manage your site month-to-month. Cancel anytime.",
+      features: [
+        "Everything in Build & Own",
+        "Managed hosting & SSL",
+        "Monthly content updates",
+        "Ongoing SEO optimization",
+        "Analytics & monthly reports",
+        "Priority support",
+        "Security patches & backups",
+      ],
+      cta: "Start Today",
+      recommended: true,
     },
   ];
 
-  return (
-    <section id="services" className="py-20 px-6 bg-gray-50">
-      <div className="max-w-6xl mx-auto">
-        <div className="text-center mb-16">
-          <h2 className="font-serif text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-            Everything Your Business Needs Online
-          </h2>
-          <p className="text-gray-600 max-w-2xl mx-auto">
-            From design to deployment to ongoing support — we handle it all so
-            you can focus on running your business.
-          </p>
-        </div>
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {services.map((s) => (
-            <div
-              key={s.title}
-              className="bg-white rounded-xl p-8 border border-gray-100 hover:border-pine-200 hover:shadow-lg transition-all"
-            >
-              <div className="text-3xl mb-4">{s.icon}</div>
-              <h3 className="font-serif text-xl font-semibold text-gray-900 mb-2">
-                {s.title}
-              </h3>
-              <p className="text-gray-600 text-sm leading-relaxed">{s.desc}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ─── Pricing ───────────────────────────────────────────────────────────── */
-function Pricing() {
-  const plans = [
-    {
-      name: "Starter",
-      price: "$499",
-      period: "one-time",
-      desc: "Perfect for new businesses that need a professional online presence fast.",
-      features: [
-        "Single-page website",
-        "Mobile responsive design",
-        "Contact form",
-        "Google Business Profile setup",
-        "Basic SEO setup",
-        "1 month free support",
-      ],
-      cta: "Get Started",
-      popular: false,
-    },
-    {
-      name: "Professional",
-      price: "$999",
-      period: "one-time",
-      desc: "For established businesses ready to dominate their local market online.",
-      features: [
-        "Up to 5 pages",
-        "Custom design",
-        "Local SEO optimization",
-        "Social media integration",
-        "Analytics dashboard",
-        "3 months free support",
-        "Content writing assistance",
-      ],
-      cta: "Most Popular",
-      popular: true,
-    },
-    {
-      name: "Growth",
-      price: "$149",
-      period: "/month",
-      desc: "Ongoing partnership for businesses that want continuous growth and support.",
-      features: [
-        "Everything in Professional",
-        "Monthly content updates",
-        "SEO monitoring & adjustments",
-        "Priority support",
-        "Monthly performance reports",
-        "Social media posting (4/mo)",
-        "Hosting included",
-      ],
-      cta: "Start Growing",
-      popular: false,
-    },
+  const enhancements = [
+    { name: "Logo Design", price: "$150" },
+    { name: "Professional Copywriting (per page)", price: "$75" },
+    { name: "Google Ads Setup & First Campaign", price: "$200" },
+    { name: "Social Media Profile Setup (per platform)", price: "$50" },
+    { name: "E-commerce / Online Ordering", price: "$300+" },
+    { name: "Photography Session (on-location)", price: "$250" },
+    { name: "Custom Domain & Email Setup", price: "$50" },
+    { name: "Additional Pages (per page)", price: "$75" },
   ];
 
   return (
     <section id="pricing" className="py-20 px-6">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         <div className="text-center mb-16">
-          <h2 className="font-serif text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
             Simple, Honest Pricing
           </h2>
           <p className="text-gray-600 max-w-2xl mx-auto">
@@ -270,33 +192,40 @@ function Pricing() {
             prices that make sense for East Texas businesses.
           </p>
         </div>
-        <div className="grid md:grid-cols-3 gap-8">
-          {plans.map((p) => (
+
+        {/* Two tier cards */}
+        <div className="grid md:grid-cols-2 gap-8 mb-16">
+          {tiers.map((t) => (
             <div
-              key={p.name}
+              key={t.name}
               className={`rounded-xl p-8 border-2 flex flex-col ${
-                p.popular
+                t.recommended
                   ? "border-pine-600 bg-pine-50 relative"
                   : "border-gray-100 bg-white"
               }`}
             >
-              {p.popular && (
+              {t.recommended && (
                 <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-pine-700 text-white text-xs font-bold px-4 py-1 rounded-full">
-                  Most Popular
+                  Recommended
                 </span>
               )}
-              <h3 className="font-serif text-2xl font-bold text-gray-900 mb-1">
-                {p.name}
+              <h3 className="text-xl font-bold text-gray-900 mb-1">
+                {t.name}
               </h3>
               <div className="mb-4">
                 <span className="text-4xl font-bold text-gray-900">
-                  {p.price}
+                  {t.price}
                 </span>
-                <span className="text-gray-500 text-sm ml-1">{p.period}</span>
+                <span className="text-gray-500 text-sm ml-1">{t.period}</span>
+                {t.priceSetup && (
+                  <span className="text-gray-500 text-sm ml-2">
+                    + {t.priceSetup}
+                  </span>
+                )}
               </div>
-              <p className="text-gray-600 text-sm mb-6">{p.desc}</p>
+              <p className="text-gray-600 text-sm mb-6">{t.desc}</p>
               <ul className="space-y-3 mb-8 flex-1">
-                {p.features.map((f) => (
+                {t.features.map((f) => (
                   <li key={f} className="flex items-start gap-2 text-sm text-gray-700">
                     <svg className="w-5 h-5 text-pine-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -308,15 +237,38 @@ function Pricing() {
               <a
                 href="#contact"
                 className={`text-center py-3 rounded-full font-medium transition-colors ${
-                  p.popular
+                  t.recommended
                     ? "bg-pine-700 text-white hover:bg-pine-800"
                     : "bg-gray-100 text-gray-800 hover:bg-gray-200"
                 }`}
               >
-                {p.cta}
+                {t.cta}
               </a>
             </div>
           ))}
+        </div>
+
+        {/* Optional Enhancements */}
+        <div className="bg-gray-50 rounded-xl border border-gray-100 p-8">
+          <h3 className="text-xl font-bold text-gray-900 mb-2 text-center">
+            Optional Enhancements
+          </h3>
+          <p className="text-gray-500 text-sm text-center mb-8">
+            Add any of these to either tier
+          </p>
+          <div className="grid sm:grid-cols-2 gap-x-12 gap-y-4">
+            {enhancements.map((e) => (
+              <div
+                key={e.name}
+                className="flex items-center justify-between py-2 border-b border-gray-200 last:border-0"
+              >
+                <span className="text-sm text-gray-700">{e.name}</span>
+                <span className="text-sm font-semibold text-gray-900 ml-4 flex-shrink-0">
+                  {e.price}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>
@@ -346,7 +298,7 @@ function Portfolio() {
     <section id="portfolio" className="py-20 px-6 bg-gray-50">
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-16">
-          <h2 className="font-serif text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
             Our Work
           </h2>
           <p className="text-gray-600 max-w-2xl mx-auto">
@@ -381,7 +333,7 @@ function Portfolio() {
                     </span>
                   ))}
                 </div>
-                <h3 className="font-serif text-xl font-semibold text-gray-900 mb-1 group-hover:text-pine-700 transition-colors">
+                <h3 className="text-xl font-semibold text-gray-900 mb-1 group-hover:text-pine-700 transition-colors">
                   {p.name}
                 </h3>
                 <p className="text-gray-600 text-sm">{p.desc}</p>
@@ -407,7 +359,7 @@ function IntakeForm() {
     <section id="contact" className="py-20 px-6">
       <div className="max-w-3xl mx-auto">
         <div className="text-center mb-12">
-          <h2 className="font-serif text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
             Start Your Project
           </h2>
           <p className="text-gray-600">
@@ -419,7 +371,7 @@ function IntakeForm() {
         {submitted ? (
           <div className="bg-pine-50 border border-pine-200 rounded-xl p-8 text-center">
             <div className="text-4xl mb-4">🎉</div>
-            <h3 className="font-serif text-2xl font-bold text-pine-800 mb-2">
+            <h3 className="text-2xl font-bold text-pine-800 mb-2">
               Thank you!
             </h3>
             <p className="text-pine-700">
@@ -432,7 +384,6 @@ function IntakeForm() {
             onSubmit={handleSubmit}
             className="bg-white rounded-xl border border-gray-100 p-8 space-y-6 shadow-sm"
           >
-            {/* Row: Owner Name + Business Name */}
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -458,7 +409,6 @@ function IntakeForm() {
               </div>
             </div>
 
-            {/* Row: Email + Phone */}
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -483,7 +433,6 @@ function IntakeForm() {
               </div>
             </div>
 
-            {/* Business Address */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Business Address
@@ -495,7 +444,6 @@ function IntakeForm() {
               />
             </div>
 
-            {/* Business Hours */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Business Hours
@@ -507,7 +455,6 @@ function IntakeForm() {
               />
             </div>
 
-            {/* Website + Industry */}
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -532,7 +479,6 @@ function IntakeForm() {
               </div>
             </div>
 
-            {/* Color Preferences */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Color Preferences
@@ -544,7 +490,6 @@ function IntakeForm() {
               />
             </div>
 
-            {/* What do you need */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 What do you need? *
@@ -562,7 +507,6 @@ function IntakeForm() {
               </select>
             </div>
 
-            {/* Project Description */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Tell us about your project
@@ -574,7 +518,6 @@ function IntakeForm() {
               />
             </div>
 
-            {/* File Uploads */}
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -619,7 +562,7 @@ function Footer() {
       <div className="max-w-6xl mx-auto">
         <div className="grid md:grid-cols-3 gap-12 mb-12">
           <div>
-            <h3 className="font-serif text-xl font-bold text-white mb-4">
+            <h3 className="text-xl font-bold text-white mb-4">
               Piney Web Co.
             </h3>
             <p className="text-sm leading-relaxed text-gray-400">
@@ -633,11 +576,6 @@ function Footer() {
               Quick Links
             </h4>
             <ul className="space-y-2 text-sm">
-              <li>
-                <a href="#services" className="hover:text-pine-400 transition-colors">
-                  Services
-                </a>
-              </li>
               <li>
                 <a href="#pricing" className="hover:text-pine-400 transition-colors">
                   Pricing
@@ -676,7 +614,7 @@ function Footer() {
           <p className="text-sm text-gray-500">
             &copy; {new Date().getFullYear()} Piney Web Co. All rights reserved.
           </p>
-          <p className="text-sm font-serif italic text-gray-400">
+          <p className="text-sm italic text-gray-400">
             Your customers are searching. Are you there?
           </p>
         </div>

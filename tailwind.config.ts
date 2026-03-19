@@ -10,9 +10,18 @@ const config: Config = {
     extend: {
       fontFamily: {
         serif: ["var(--font-lora)", "Georgia", "serif"],
-        sans: ["var(--font-inter)", "system-ui", "sans-serif"],
       },
       colors: {
+        sage: {
+          600: "#6B8F71",
+          700: "#5A7D60",
+          800: "#4A6B50",
+        },
+        leather: {
+          500: "#8B6914",
+          600: "#7A5C12",
+          700: "#6B4F10",
+        },
         pine: {
           50: "#f0fdf4",
           100: "#dcfce7",

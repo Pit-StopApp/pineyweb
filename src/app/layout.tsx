@@ -1,16 +1,10 @@
 import type { Metadata } from "next";
-import { Lora, Inter } from "next/font/google";
+import { Lora } from "next/font/google";
 import "./globals.css";
 
 const lora = Lora({
   subsets: ["latin"],
   variable: "--font-lora",
-  display: "swap",
-});
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
   display: "swap",
 });
 
@@ -26,8 +20,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${lora.variable} ${inter.variable} scroll-smooth`}>
-      <body className="font-sans antialiased bg-white text-gray-900">
+    <html lang="en" className={`${lora.variable} scroll-smooth`}>
+      <body className="font-serif antialiased bg-white text-gray-900">
         {children}
       </body>
     </html>
