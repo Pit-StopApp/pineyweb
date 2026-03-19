@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
+import CrispChat from "@/components/CrispChat";
 
 interface ClientProfile {
   full_name: string;
@@ -18,16 +19,6 @@ export default function Dashboard() {
   const [request, setRequest] = useState("");
   const [submitStatus, setSubmitStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
-
-  useEffect(() => {
-    (window as any).$crisp = [];
-    (window as any).CRISP_WEBSITE_ID = "3def2b4b-d5cd-4179-8c56-b86ecf6e45d6";
-    const script = document.createElement("script");
-    script.src = "https://client.crisp.chat/l.js";
-    script.async = true;
-    document.head.appendChild(script);
-    return () => { script.remove(); };
-  }, []);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -177,6 +168,7 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+      <CrispChat />
     </div>
   );
 }
