@@ -348,14 +348,16 @@ function Portfolio() {
       desc: "On-demand auto parts delivery marketplace connecting customers, vendors, and drivers across East Texas.",
       image: "/pitstop.png",
       url: "https://orderpitstop.com",
-      tags: ["Next.js", "Full-Stack", "Marketplace"],
+      tags: ["Marketplace", "Next.js", "East Texas"],
+      bg: "#0a0f1e",
     },
     {
       name: "Sip Society",
-      desc: "Social platform for craft beverage enthusiasts — discover, review, and share your favorite drinks.",
+      desc: "Mobile bartending LLC serving East Texas events, weddings, and private parties.",
       image: "/sipsociety.png",
       url: "https://sipsociety.social",
-      tags: ["Web App", "Social", "Community"],
+      tags: ["Local Business", "Mobile Bar", "East Texas"],
+      bg: "#000000",
     },
   ];
 
@@ -372,14 +374,11 @@ function Portfolio() {
         </div>
         <div className="grid md:grid-cols-2 gap-8">
           {projects.map((p) => (
-            <a
+            <div
               key={p.name}
-              href={p.url}
-              target="_blank"
-              rel="noopener noreferrer"
               className="group bg-white rounded-xl border border-gray-100 overflow-hidden hover:border-pine-200 hover:shadow-lg transition-all"
             >
-              <div className="h-[200px] bg-gray-100 relative overflow-hidden">
+              <div className="h-[200px] relative overflow-hidden" style={{ backgroundColor: p.bg }}>
                 <Image
                   src={p.image}
                   alt={p.name}
@@ -399,12 +398,23 @@ function Portfolio() {
                     </span>
                   ))}
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-1 group-hover:text-pine-700 transition-colors">
+                <h3 className="text-xl font-semibold text-gray-900 mb-1">
                   {p.name}
                 </h3>
-                <p className="text-gray-600 text-sm">{p.desc}</p>
+                <p className="text-gray-600 text-sm mb-3">{p.desc}</p>
+                <a
+                  href={p.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-sm font-medium text-pine-700 hover:text-pine-800 transition-colors"
+                >
+                  View Site
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
               </div>
-            </a>
+            </div>
           ))}
         </div>
       </div>
