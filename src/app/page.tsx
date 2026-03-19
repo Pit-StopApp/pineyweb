@@ -199,7 +199,7 @@ function Pricing() {
   const tiers = [
     {
       name: "Tier 2: Build & Own",
-      price: "$499",
+      price: "$799",
       period: "one-time",
       desc: "We design and build your site, then hand it off. You own the code and hosting.",
       features: [
@@ -216,7 +216,7 @@ function Pricing() {
     },
     {
       name: "Tier 3: Build & Manage",
-      price: "$199",
+      price: "$299",
       priceSetup: "$99/mo",
       period: "setup",
       desc: "We build, host, and manage your site month-to-month. Cancel anytime.",
