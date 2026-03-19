@@ -49,7 +49,7 @@ function HomeInner() {
 /* ─── Pending Activation Banner ─────────────────────────────────────────── */
 function PendingBanner({ onDismiss }: { onDismiss: () => void }) {
   return (
-    <div className="fixed top-0 left-0 right-0 z-[60] flex items-center justify-between px-4 md:px-8 py-3 text-white text-sm" style={{ backgroundColor: "#8B5E3C" }}>
+    <div className="relative z-[60] flex items-center justify-between px-4 md:px-8 py-3 text-white text-sm" style={{ backgroundColor: "#8B5E3C" }}>
       <div className="flex items-center gap-3 flex-1 min-w-0">
         <span className="flex-shrink-0">&#9888;&#65039;</span>
         <span className="truncate">Your account is pending activation. Enter your order confirmation number to unlock your client dashboard.</span>
@@ -76,7 +76,7 @@ function Navbar() {
   ];
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100">
+    <nav className="sticky top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100">
       <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
         <a href="#" className="text-xl font-bold text-pine-800">
           Piney Web Co.
@@ -154,7 +154,7 @@ function Navbar() {
 /* ─── Hero ──────────────────────────────────────────────────────────────── */
 function Hero() {
   return (
-    <section className="pt-32 pb-20 px-6">
+    <section className="pt-16 pb-20 px-6">
       <div className="max-w-4xl mx-auto text-center">
         <div className="mb-8 flex justify-center">
           <Image
