@@ -553,47 +553,47 @@ function Footer() {
       <div className="max-w-6xl mx-auto">
         <div className="grid md:grid-cols-3 gap-12 mb-12">
           <div>
-            <h3 className="text-xl font-bold text-gray-900 mb-4">
+            <h3 className="text-xl font-bold mb-4" style={{ color: '#4A7C59' }}>
               Piney Web Co.
             </h3>
-            <p className="text-sm leading-relaxed text-gray-600">
+            <p className="text-sm leading-relaxed" style={{ color: '#3D2B1F' }}>
               Professional web design and digital marketing for East Texas small
               businesses. Based in Longview, serving the entire piney woods
               region.
             </p>
           </div>
           <div>
-            <h4 className="font-semibold text-gray-900 mb-4 text-sm uppercase tracking-wider">
+            <h4 className="font-semibold mb-4 text-sm uppercase tracking-wider" style={{ color: '#4A7C59' }}>
               Quick Links
             </h4>
-            <ul className="space-y-2 text-sm text-gray-600">
+            <ul className="space-y-2 text-sm" style={{ color: '#3D2B1F' }}>
               <li>
-                <a href="#pricing" className="hover:text-pine-700 transition-colors">
+                <a href="#pricing" className="hover:opacity-70 transition-opacity">
                   Pricing
                 </a>
               </li>
               <li>
-                <a href="#portfolio" className="hover:text-pine-700 transition-colors">
+                <a href="#portfolio" className="hover:opacity-70 transition-opacity">
                   Portfolio
                 </a>
               </li>
               <li>
-                <a href="#contact" className="hover:text-pine-700 transition-colors">
+                <a href="#contact" className="hover:opacity-70 transition-opacity">
                   Contact
                 </a>
               </li>
             </ul>
           </div>
           <div>
-            <h4 className="font-semibold text-gray-900 mb-4 text-sm uppercase tracking-wider">
+            <h4 className="font-semibold mb-4 text-sm uppercase tracking-wider" style={{ color: '#4A7C59' }}>
               Contact
             </h4>
-            <ul className="space-y-2 text-sm text-gray-600">
+            <ul className="space-y-2 text-sm" style={{ color: '#3D2B1F' }}>
               <li>Longview, TX</li>
               <li>
                 <a
                   href="mailto:hello@pineyweb.com"
-                  className="hover:text-pine-700 transition-colors"
+                  className="hover:opacity-70 transition-opacity"
                 >
                   hello@pineyweb.com
                 </a>
@@ -601,11 +601,11 @@ function Footer() {
             </ul>
           </div>
         </div>
-        <div className="border-t border-gray-300 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-sm text-gray-500">
+        <div className="pt-8 flex flex-col md:flex-row justify-between items-center gap-4" style={{ borderTop: '1px solid #D4C9B8' }}>
+          <p className="text-sm" style={{ color: '#3D2B1F', opacity: 0.6 }}>
             &copy; {new Date().getFullYear()} Piney Web Co. All rights reserved.
           </p>
-          <p className="text-sm italic text-gray-500">
+          <p className="text-sm italic" style={{ color: '#3D2B1F', opacity: 0.6 }}>
             Your customers are searching. Are you there?
           </p>
         </div>
