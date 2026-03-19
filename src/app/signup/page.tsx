@@ -27,6 +27,7 @@ export default function SignUp() {
       password: form.password,
       options: {
         data: { full_name: form.fullName, business_name: form.businessName },
+        emailRedirectTo: "https://pineyweb.com/dashboard",
       },
     });
 
