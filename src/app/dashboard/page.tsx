@@ -3,49 +3,48 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import Link from "next/link";
-import CrispChat from "@/components/CrispChat";
+import DashboardShell from "@/components/DashboardShell";
 
 interface ClientProfile {
   full_name: string;
   business_name: string;
   email: string;
+  status: string | null;
+  site_url: string | null;
+  tier: string | null;
 }
 
-export default function Dashboard() {
+export default function DashboardHome() {
   const router = useRouter();
   const [profile, setProfile] = useState<ClientProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [request, setRequest] = useState("");
-  const [submitStatus, setSubmitStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
-  const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push("/login");
-        return;
-      }
+      if (!session) { router.push("/login"); return; }
 
       const { data } = await supabase
         .from("pineyweb_clients")
-        .select("full_name, business_name, email")
+        .select("full_name, business_name, email, status, site_url, tier")
         .eq("user_id", session.user.id)
         .single();
 
       if (data) {
+        if (data.status === "pending") { router.push("/activate"); return; }
         setProfile(data);
       } else {
         setProfile({
           full_name: session.user.user_metadata?.full_name || "Client",
           business_name: session.user.user_metadata?.business_name || "",
           email: session.user.email || "",
+          status: "active",
+          site_url: null,
+          tier: null,
         });
       }
       setLoading(false);
     };
-
     checkAuth();
   }, [router]);
 
@@ -54,121 +53,94 @@ export default function Dashboard() {
     router.push("/login");
   };
 
-  const handleSubmitRequest = async () => {
-    if (!request.trim()) return;
-    setSubmitStatus("sending");
-    setErrorMsg("");
-
-    try {
-      const res = await fetch("https://api.web3forms.com/submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          access_key: process.env.NEXT_PUBLIC_WEB3FORMS_KEY,
-          subject: `Change Request from ${profile?.business_name || profile?.full_name || "Client"}`,
-          from_name: profile?.full_name || "Client",
-          business_name: profile?.business_name || "",
-          email: profile?.email || "",
-          message: request,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setSubmitStatus("success");
-        setRequest("");
-      } else {
-        setErrorMsg(data.message || "Something went wrong.");
-        setSubmitStatus("error");
-      }
-    } catch {
-      setErrorMsg("Network error. Please try again.");
-      setSubmitStatus("error");
-    }
-  };
-
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#FAF8F5" }}>
-        <p className="text-gray-500 font-serif">Loading...</p>
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#fef9f1" }}>
+        <p style={{ color: "#414942" }}>Loading...</p>
       </div>
     );
   }
 
+  const firstName = profile?.full_name?.split(" ")[0] || profile?.business_name || "there";
+
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "#FAF8F5" }}>
+    <DashboardShell businessName={profile?.business_name} onLogout={handleLogout}>
       {/* Header */}
-      <nav className="bg-white border-b border-gray-100 px-6 py-4">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold text-[#4A6B50] font-serif">
-            Piney Web Co.
-          </Link>
-          <button
-            onClick={handleLogout}
-            className="text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors font-serif"
-          >
-            Log Out
-          </button>
-        </div>
-      </nav>
+      <div className="mb-12">
+        <span className="text-xs tracking-[0.15em] uppercase font-bold mb-2 block" style={{ color: "#316342" }}>DASHBOARD OVERVIEW</span>
+        <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-4" style={{ color: "#1d1c17" }}>Good morning, {firstName}.</h2>
+        <p className="max-w-2xl text-lg leading-relaxed italic" style={{ color: "#414942" }}>
+          Your digital presence is performing optimally. Review your live site and account status below.
+        </p>
+      </div>
 
-      <div className="max-w-4xl mx-auto px-6 py-12">
-        {/* Welcome */}
-        <div className="mb-10">
-          <h1 className="text-3xl font-bold text-gray-900 font-serif mb-1">
-            Welcome back{profile?.business_name ? `, ${profile.business_name}` : ""}
-          </h1>
-          <p className="text-gray-600 font-serif text-sm">
-            {profile?.full_name} &middot; {profile?.email}
-          </p>
-        </div>
-
-        {/* Change Request Form */}
-        <div className="bg-white rounded-xl border border-gray-100 p-8 shadow-sm">
-          <h2 className="text-xl font-bold text-gray-900 font-serif mb-2">
-            Submit a Change Request
-          </h2>
-          <p className="text-gray-500 font-serif text-sm mb-6">
-            Need something updated on your website? Describe the change below and we&apos;ll get on it.
-          </p>
-
-          {submitStatus === "success" ? (
-            <div className="bg-[#f0fdf4] border border-[#bbf7d0] rounded-lg p-4 text-sm text-[#4A6B50] font-serif">
-              Your request has been submitted. We&apos;ll follow up within 24 hours.
-              <button
-                onClick={() => setSubmitStatus("idle")}
-                className="block mt-3 text-[#5A7D60] font-medium hover:text-[#4A6B50]"
-              >
-                Submit another request
-              </button>
+      {/* Website Preview */}
+      <div className="rounded-xl overflow-hidden mb-12" style={{ backgroundColor: "#f8f3eb", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+        <div className="flex items-center justify-between px-6 py-4 border-b" style={{ backgroundColor: "#e7e2da", borderColor: "rgba(193,201,191,0.1)" }}>
+          <div className="flex items-center gap-3">
+            <div className="flex gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "rgba(186,26,26,0.4)" }} />
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "#fdc39a" }} />
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "rgba(74,124,89,0.4)" }} />
             </div>
+            <div className="ml-4 px-4 py-1.5 rounded text-xs flex items-center gap-2 border" style={{ backgroundColor: "#fef9f1", color: "#414942", borderColor: "rgba(193,201,191,0.3)" }}>
+              <span className="material-symbols-outlined text-[14px]">lock</span>
+              {profile?.site_url?.replace(/^https?:\/\//, "") || "yoursite.com"}
+            </div>
+          </div>
+          {profile?.site_url && (
+            <a href={profile.site_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-5 py-2.5 text-white text-sm font-semibold rounded-md" style={{ backgroundColor: "#316342" }}>
+              <span>Open Site</span>
+              <span className="material-symbols-outlined text-[18px]">open_in_new</span>
+            </a>
+          )}
+        </div>
+        <div className="aspect-video w-full relative overflow-hidden" style={{ backgroundColor: "#fef9f1" }}>
+          {profile?.site_url ? (
+            <iframe src={profile.site_url} className="w-full h-full border-0" title="Website Preview" />
           ) : (
-            <>
-              <textarea
-                value={request}
-                onChange={(e) => setRequest(e.target.value)}
-                rows={5}
-                placeholder="Describe what you'd like changed — update hours, add a photo, change text, add a new page, etc."
-                className="w-full px-4 py-3 rounded-lg border border-gray-200 focus:ring-2 focus:ring-[#6B8F71] focus:border-transparent outline-none transition-shadow text-sm font-serif resize-vertical mb-4"
-              />
-
-              {submitStatus === "error" && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 font-serif mb-4">
-                  {errorMsg}
-                </div>
-              )}
-
-              <button
-                onClick={handleSubmitRequest}
-                disabled={submitStatus === "sending" || !request.trim()}
-                className="px-8 py-3 rounded-full bg-[#5A7D60] text-white font-medium hover:bg-[#4A6B50] transition-colors text-sm font-serif disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {submitStatus === "sending" ? "Sending..." : "Submit Request"}
-              </button>
-            </>
+            <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: "#f8f3eb" }}>
+              <div className="text-center">
+                <span className="material-symbols-outlined text-5xl mb-4 block" style={{ color: "#c1c9bf" }}>web</span>
+                <p className="text-sm" style={{ color: "#414942" }}>Your website preview will appear here</p>
+              </div>
+            </div>
           )}
         </div>
       </div>
-      <CrispChat />
-    </div>
+
+      {/* Bento Status Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {/* Site Status */}
+        <div className="p-8 rounded-xl border transition-colors" style={{ backgroundColor: "#f8f3eb", borderColor: "rgba(193,201,191,0.2)" }}>
+          <div className="flex items-center justify-between mb-6">
+            <span className="material-symbols-outlined text-3xl" style={{ color: "#316342" }}>verified</span>
+            <div className="px-4 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase" style={{ backgroundColor: "rgba(74,124,89,0.2)", color: "#4a7c59" }}>
+              Active
+            </div>
+          </div>
+          <h3 className="text-sm uppercase tracking-widest mb-1" style={{ color: "#414942" }}>Site Status</h3>
+          <p className="text-2xl font-bold" style={{ color: "#1d1c17" }}>Online &amp; Healthy</p>
+        </div>
+
+        {/* Current Tier */}
+        <div className="p-8 rounded-xl border transition-colors" style={{ backgroundColor: "#f8f3eb", borderColor: "rgba(193,201,191,0.2)" }}>
+          <div className="flex items-center justify-between mb-6">
+            <span className="material-symbols-outlined text-3xl" style={{ color: "#805533" }}>military_tech</span>
+          </div>
+          <h3 className="text-sm uppercase tracking-widest mb-1" style={{ color: "#414942" }}>Current Tier</h3>
+          <p className="text-2xl font-bold" style={{ color: "#805533" }}>{profile?.tier || "Managed"}</p>
+        </div>
+
+        {/* Next Billing */}
+        <div className="p-8 rounded-xl border transition-colors" style={{ backgroundColor: "#f8f3eb", borderColor: "rgba(193,201,191,0.2)" }}>
+          <div className="flex items-center justify-between mb-6">
+            <span className="material-symbols-outlined text-3xl" style={{ color: "#414942" }}>event_upcoming</span>
+          </div>
+          <h3 className="text-sm uppercase tracking-widest mb-1" style={{ color: "#414942" }}>Next Billing Date</h3>
+          <p className="text-2xl font-bold" style={{ color: "#1d1c17" }}>—</p>
+        </div>
+      </div>
+    </DashboardShell>
   );
 }
