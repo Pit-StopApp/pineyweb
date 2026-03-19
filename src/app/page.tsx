@@ -376,9 +376,10 @@ function Portfolio() {
           {projects.map((p) => (
             <div
               key={p.name}
-              className="group bg-white rounded-xl border border-gray-100 overflow-hidden hover:border-pine-200 hover:shadow-lg transition-all"
+              className="group rounded-xl overflow-hidden hover:shadow-lg transition-all"
+              style={{ backgroundColor: p.bg }}
             >
-              <div className="h-[200px] relative overflow-hidden" style={{ backgroundColor: p.bg }}>
+              <div className="h-[200px] relative overflow-hidden">
                 <Image
                   src={p.image}
                   alt={p.name}
@@ -392,21 +393,21 @@ function Portfolio() {
                   {p.tags.map((t) => (
                     <span
                       key={t}
-                      className="text-xs font-medium px-2 py-0.5 rounded-full bg-pine-50 text-pine-700"
+                      className="text-xs font-medium px-2 py-0.5 rounded-full bg-white/10 text-gray-300"
                     >
                       {t}
                     </span>
                   ))}
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-1">
+                <h3 className="text-xl font-semibold text-white mb-1">
                   {p.name}
                 </h3>
-                <p className="text-gray-600 text-sm mb-3">{p.desc}</p>
+                <p className="text-gray-400 text-sm mb-3">{p.desc}</p>
                 <a
                   href={p.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-sm font-medium text-pine-700 hover:text-pine-800 transition-colors"
+                  className="inline-flex items-center gap-1 text-sm font-medium text-pine-400 hover:text-pine-300 transition-colors"
                 >
                   View Site
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
