@@ -8,6 +8,7 @@ export default function Home() {
     <div className="min-h-screen bg-white">
       <Navbar />
       <Hero />
+      <WhyPineyWeb />
       <Pricing />
       <Portfolio />
       <IntakeForm />
@@ -123,6 +124,69 @@ function Hero() {
           >
             See Our Work
           </a>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─── Why Piney Web Co. ─────────────────────────────────────────────────── */
+function WhyPineyWeb() {
+  const capabilities = [
+    "Contact Forms & Quote Requests",
+    "Google Maps & Directions",
+    "Online Booking & Scheduling",
+    "Photo Galleries & Service Showcases",
+    "Customer Review Integrations",
+    "Payment Collection & Invoicing",
+    "Email Automation",
+    "Online Stores & Inventory",
+    "SEO Setup",
+    "Google Business Profile Optimization",
+  ];
+
+  return (
+    <section className="py-20 px-6 bg-[#FAF8F5]">
+      <div className="max-w-4xl mx-auto">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-sage-600 mb-4">
+          WHY PINEY WEB CO.
+        </p>
+        <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8">
+          We&apos;re Not a Template Shop.
+        </h2>
+        <p className="text-gray-700 leading-relaxed mb-6">
+          Most web design companies hand you a Wix template, slap your logo on
+          it, and call it a day. We build real websites — custom coded, fast, and
+          built to last.
+        </p>
+        <p className="text-gray-700 leading-relaxed mb-12">
+          We&apos;re local. We know East Texas businesses because we work alongside
+          them every day. When we build your site, we&apos;re not outsourcing it
+          overseas or running it through a drag-and-drop builder. We&apos;re writing
+          real code, built specifically for your business. And when you grow —
+          when you need online ordering, a booking system, or a customer portal —
+          we can build that too. No switching providers. No starting over. Just
+          call us.
+        </p>
+        <div className="grid sm:grid-cols-2 gap-x-12 gap-y-4">
+          {capabilities.map((item) => (
+            <div key={item} className="flex items-center gap-3">
+              <svg
+                className="w-5 h-5 text-sage-600 flex-shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+              <span className="text-sm text-gray-800">{item}</span>
+            </div>
+          ))}
         </div>
       </div>
     </section>
