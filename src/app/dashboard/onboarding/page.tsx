@@ -163,11 +163,14 @@ export default function Onboarding() {
                   <Field label="Tagline" value={f.tagline} onChange={v => set("tagline", v)} placeholder="Your brand's core promise" cls={inputClass} />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <Field label="Phone Number" value={f.phone} onChange={v => set("phone", v)} placeholder="(555) 000-0000" cls={inputClass} type="tel" />
-                  <Field label="Email Address" value={f.email} onChange={v => set("email", v)} placeholder="hello@yourbusiness.com" cls={inputClass} type="email" />
+                  <Field label="Business Phone Number" value={f.phone} onChange={v => set("phone", v)} placeholder="(555) 000-0000" cls={inputClass} type="tel" />
+                  <div className="space-y-2">
+                    <Field label="Business Email (customer-facing)" value={f.email} onChange={v => set("email", v)} placeholder="hello@yourbusiness.com" cls={inputClass} type="email" />
+                    <p className="text-xs" style={{ color: "#717971" }}>This is the email your customers will use to contact you — not your personal email.</p>
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <Field label="Physical Address" value={f.address} onChange={v => set("address", v)} placeholder="123 Main St, Longview, TX" cls={inputClass} />
+                  <Field label="Business Address" value={f.address} onChange={v => set("address", v)} placeholder="123 Main St, Longview, TX" cls={inputClass} />
                   <Field label="Business Hours" value={f.hours} onChange={v => set("hours", v)} placeholder="Mon-Fri, 8am - 5pm" cls={inputClass} />
                 </div>
                 <TextArea label="Services Offered" value={f.services_offered} onChange={v => set("services_offered", v)} placeholder="List your primary services, separated by commas..." rows={3} cls={inputClass} />
