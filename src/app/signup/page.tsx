@@ -1,15 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 
 export default function SignUp() {
-  const router = useRouter();
   const [form, setForm] = useState({ fullName: "", businessName: "", email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
   const set = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((prev) => ({ ...prev, [field]: e.target.value }));
@@ -46,7 +45,22 @@ export default function SignUp() {
       });
     }
 
-    router.push("/dashboard");
+    // Send custom confirmation email via Resend
+    try {
+      await fetch("/api/auth/send-confirmation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: form.email,
+          firstName: form.fullName.split(" ")[0] || form.fullName,
+        }),
+      });
+    } catch {
+      // Non-blocking — user is still created
+    }
+
+    setEmailSent(true);
+    setLoading(false);
   };
 
   const inputClass =
@@ -63,45 +77,59 @@ export default function SignUp() {
           <p className="text-gray-600 font-serif text-sm">Sign up to access your client portal</p>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-100 p-8 shadow-sm space-y-5">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1 font-serif">Full Name *</label>
-            <input type="text" value={form.fullName} onChange={set("fullName")} placeholder="John Smith" className={inputClass} />
+        {emailSent ? (
+          <div className="bg-white rounded-xl border border-gray-100 p-8 shadow-sm text-center">
+            <div className="text-4xl mb-4">📧</div>
+            <h2 className="text-xl font-bold mb-2 font-serif" style={{ color: "#4A6B50" }}>Check your email</h2>
+            <p className="text-gray-600 font-serif text-sm mb-4">
+              We&apos;ve sent a confirmation link to <strong>{form.email}</strong>. Click the link to verify your account and access your dashboard.
+            </p>
+            <p className="text-gray-400 font-serif text-xs">
+              Didn&apos;t receive it? Check your spam folder or{" "}
+              <button onClick={handleSignUp} className="underline" style={{ color: "#4A6B50" }}>resend</button>.
+            </p>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1 font-serif">Business Name</label>
-            <input type="text" value={form.businessName} onChange={set("businessName")} placeholder="Your Business Name" className={inputClass} />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1 font-serif">Email *</label>
-            <input type="email" value={form.email} onChange={set("email")} placeholder="you@business.com" className={inputClass} />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1 font-serif">Password *</label>
-            <input type="password" value={form.password} onChange={set("password")} placeholder="At least 6 characters" className={inputClass} />
-          </div>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 font-serif">
-              {error}
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-100 p-8 shadow-sm space-y-5">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1 font-serif">Full Name *</label>
+              <input type="text" value={form.fullName} onChange={set("fullName")} placeholder="John Smith" className={inputClass} />
             </div>
-          )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1 font-serif">Business Name</label>
+              <input type="text" value={form.businessName} onChange={set("businessName")} placeholder="Your Business Name" className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1 font-serif">Email *</label>
+              <input type="email" value={form.email} onChange={set("email")} placeholder="you@business.com" className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1 font-serif">Password *</label>
+              <input type="password" value={form.password} onChange={set("password")} placeholder="At least 6 characters" className={inputClass} />
+            </div>
 
-          <button
-            onClick={handleSignUp}
-            disabled={loading}
-            className="w-full py-3 rounded-full bg-[#5A7D60] text-white font-medium hover:bg-[#4A6B50] transition-colors text-sm font-serif disabled:opacity-50"
-          >
-            {loading ? "Creating account..." : "Sign Up"}
-          </button>
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 font-serif">
+                {error}
+              </div>
+            )}
 
-          <p className="text-center text-sm text-gray-500 font-serif">
-            Already have an account?{" "}
-            <Link href="/login" className="text-[#5A7D60] font-medium hover:text-[#4A6B50]">
-              Log in
-            </Link>
-          </p>
-        </div>
+            <button
+              onClick={handleSignUp}
+              disabled={loading}
+              className="w-full py-3 rounded-full bg-[#5A7D60] text-white font-medium hover:bg-[#4A6B50] transition-colors text-sm font-serif disabled:opacity-50"
+            >
+              {loading ? "Creating account..." : "Sign Up"}
+            </button>
+
+            <p className="text-center text-sm text-gray-500 font-serif">
+              Already have an account?{" "}
+              <Link href="/login" className="text-[#5A7D60] font-medium hover:text-[#4A6B50]">
+                Log in
+              </Link>
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

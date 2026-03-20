@@ -112,14 +112,24 @@ Admin-only. Sends BuildStarted or SiteLive email to a client. Verifies admin rol
 ### Admin (admin role only)
 - `/admin/clients` — Full client management dashboard: table with name/business/tier/status/joined/actions, contextual action buttons per status (Send Build Started for pending, Send Site Live for in_progress, View Dashboard for all), pagination, search, stats grid (total clients, active builds, managed tier %, onboard client CTA)
 
+## Email Confirmation Flow (Custom via Resend)
+Supabase's built-in email confirmation is disabled. Instead:
+1. User signs up → `supabase.auth.signUp()` creates unconfirmed user
+2. Signup page immediately POSTs to `/api/auth/send-confirmation` with email + firstName
+3. API route calls `supabase.auth.admin.generateLink({ type: 'signup' })` to get a confirmation URL
+4. Sends email via Resend template `fd770b43-793f-4158-a0d2-12482c6aedcb` with `{ firstName, confirmationUrl }`
+5. User clicks link → Supabase confirms email → redirects to `/dashboard`
+6. Signup page shows "Check your email" message (no auto-redirect to dashboard)
+
 ## Order Flow
 1. Client purchases via Stripe checkout
 2. Webhook creates order + sends confirmation email
-3. Client signs up at pineyweb.com/signup
-4. Client enters confirmation number at /activate
-5. Account activated, client accesses dashboard
-6. Admin sends "Build Started" email when work begins
-7. Admin sends "Site Live" email when site launches
+3. Client signs up at pineyweb.com/signup → receives email confirmation link
+4. Client confirms email → accesses dashboard
+5. Client enters confirmation number at /activate
+6. Account activated, client accesses full dashboard
+7. Admin sends "Build Started" email when work begins
+8. Admin sends "Site Live" email when site launches
 
 ## E2E Tests (Playwright)
 
