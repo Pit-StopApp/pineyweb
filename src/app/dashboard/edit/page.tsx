@@ -48,6 +48,8 @@ export default function EditSite() {
   const [uploading, setUploading] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadKey, setUploadKey] = useState("");
+  const [showHelpModal, setShowHelpModal] = useState(false);
+  const [dontShowAgain, setDontShowAgain] = useState(false);
 
   const [images, setImages] = useState<Record<string, string>>({});
   const [texts, setTexts] = useState<Record<string, string>>({});
@@ -85,6 +87,10 @@ export default function EditSite() {
       setDeployHookUrl(data.deploy_hook_url || null);
       await loadContent(data.id);
       setLoading(false);
+      // Show help modal on first visit
+      if (typeof window !== "undefined" && localStorage.getItem("piney_edit_modal_seen") !== "true") {
+        setShowHelpModal(true);
+      }
     };
     checkAuth();
   }, [router, loadContent]);
@@ -149,6 +155,12 @@ export default function EditSite() {
     setUploading(null);
   };
 
+  const dismissModal = () => {
+    if (dontShowAgain) localStorage.setItem("piney_edit_modal_seen", "true");
+    setShowHelpModal(false);
+    setDontShowAgain(false);
+  };
+
   if (loading) return <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#fef9f1" }}><p style={{ color: "#414942" }}>Loading...</p></div>;
 
   const tabs: { key: Tab; label: string }[] = [
@@ -164,8 +176,71 @@ export default function EditSite() {
           <span className="text-xs uppercase tracking-widest mb-2 block" style={{ color: "#805533" }}>Editor Mode</span>
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight" style={{ color: "#1d1c17" }}>Refine Your Presence</h1>
         </div>
-        <Image src="/transparentPINEYWEB.png" width={80} height={80} alt="Piney Web Co." unoptimized className="hidden md:block" />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowHelpModal(true)}
+            title="How does this work?"
+            className="w-8 h-8 rounded-full flex items-center justify-center border-2 text-sm font-bold transition-colors"
+            style={{ borderColor: "#4A7C59", color: "#4A7C59", backgroundColor: "#FAF8F5" }}
+          >
+            ?
+          </button>
+          <Image src="/transparentPINEYWEB.png" width={80} height={80} alt="Piney Web Co." unoptimized className="hidden md:block" />
+        </div>
       </header>
+
+      {/* Help Modal */}
+      {showHelpModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.4)", animation: "fadeIn 0.2s ease-out" }}>
+          <div className="w-full max-w-[520px] p-8 md:p-10 rounded-xl" style={{ backgroundColor: "#F5F0E8", boxShadow: "0 20px 60px rgba(48,20,0,0.15)", animation: "fadeIn 0.2s ease-out" }}>
+            <h2 className="text-2xl font-bold mb-6" style={{ color: "#4A7C59" }}>How Your Edit Page Works</h2>
+
+            <div className="space-y-5 mb-6">
+              <div className="flex items-start gap-3">
+                <span className="material-symbols-outlined text-lg mt-0.5" style={{ color: "#4A7C59" }}>edit_note</span>
+                <div>
+                  <p className="font-bold text-sm mb-1" style={{ color: "#1d1c17" }}>Text Tab</p>
+                  <p className="text-sm leading-relaxed" style={{ color: "#414942" }}>Update your business name, tagline, contact info, hours, and description. Changes save as a draft until you publish.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="material-symbols-outlined text-lg mt-0.5" style={{ color: "#4A7C59" }}>image</span>
+                <div>
+                  <p className="font-bold text-sm mb-1" style={{ color: "#1d1c17" }}>Images Tab</p>
+                  <p className="text-sm leading-relaxed" style={{ color: "#414942" }}>Upload your logo, hero image, and gallery photos. Supported formats: JPG, PNG, SVG up to 5MB.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="material-symbols-outlined text-lg mt-0.5" style={{ color: "#4A7C59" }}>palette</span>
+                <div>
+                  <p className="font-bold text-sm mb-1" style={{ color: "#1d1c17" }}>Colors Tab</p>
+                  <p className="text-sm leading-relaxed" style={{ color: "#414942" }}>Adjust your primary color, secondary color, and background to match your brand.</p>
+                </div>
+              </div>
+            </div>
+
+            <hr style={{ borderColor: "rgba(193,201,191,0.3)", margin: "20px 0" }} />
+
+            <p className="text-sm leading-relaxed mb-4" style={{ color: "#414942" }}>
+              <strong>Save Draft</strong> saves your changes to our system. <strong>Publish</strong> pushes everything live to your website — changes go live in about 60 seconds.
+            </p>
+
+            <p className="text-sm leading-relaxed mb-6" style={{ color: "#8B5E3C" }}>
+              For larger changes like new pages, layout updates, or new features, use the chat bubble in the bottom right.
+            </p>
+
+            <label className="flex items-center gap-2 mb-5 cursor-pointer">
+              <input type="checkbox" checked={dontShowAgain} onChange={e => setDontShowAgain(e.target.checked)} className="rounded" style={{ accentColor: "#4A7C59" }} />
+              <span className="text-sm" style={{ color: "#414942" }}>Don&apos;t show this again</span>
+            </label>
+
+            <button onClick={dismissModal} className="w-full py-3.5 rounded-md font-bold text-white transition-all active:scale-95" style={{ backgroundColor: "#4A7C59" }}>
+              Got it, let&apos;s go
+            </button>
+          </div>
+        </div>
+      )}
+      <style>{`@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`}</style>
 
       {/* Info Banner */}
       <div className="mb-10 p-5 rounded-lg" style={{ backgroundColor: "#FAF8F5", borderLeft: "4px solid #4A7C59" }}>

@@ -102,6 +102,7 @@ Admin-only. Sends BuildStarted or SiteLive email to a client. Verifies admin rol
   - Save Draft: upserts to pineyweb_site_content
   - Publish: saves + POSTs to client's deploy_hook_url from pineyweb_clients
   - Info banner directs users to Crisp chat for larger changes
+  - Help modal: auto-shows on first visit (localStorage `piney_edit_modal_seen`), explains tabs + save/publish flow. ? button in header re-opens it anytime.
 - `/dashboard/billing` — Billing & Payments page (Stitch design):
   - Current Plan card: tier from DB, $99/mo managed or $799 one-time, next billing date
   - Payment Method card: fetched from Stripe via stripe_customer_id, shows brand/last4/expiry
