@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
   if (event.type === "invoice.paid") {
     const invoice = event.data.object as Stripe.Invoice;
 
-    const fullInvoice = await stripe.invoices.retrieve(invoice.id, { expand: ["lines.data.price"] });
+    const fullInvoice = invoice;
     const lineItems = fullInvoice.lines?.data || [];
 
     const email = fullInvoice.customer_email || "";
@@ -104,7 +104,8 @@ export async function POST(request: NextRequest) {
     let isManaged = false;
     for (const item of lineItems) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const priceId = ((item as any).price as Stripe.Price)?.id;
+      const price = (item as any).price;
+      const priceId = typeof price === "string" ? price : price?.id;
       const mapped = priceId ? PRICE_MAP[priceId] : null;
       if (mapped === "MANAGED_SETUP") isManaged = true;
       if (mapped && mapped !== "ONE_TIME_BUILD" && mapped !== "MANAGED_SETUP" && mapped !== "MANAGED_MONTHLY") {
