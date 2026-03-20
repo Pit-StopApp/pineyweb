@@ -86,7 +86,13 @@ Admin-only. Sends BuildStarted or SiteLive email to a client. Verifies admin rol
 
 ### Client Dashboard (protected)
 - `/dashboard` — Home with site preview, status grid
-- `/dashboard/edit` — Edit site content (images, text, colors)
+- `/dashboard/edit` — Edit site content with 3 tabs:
+  - **Text**: business_name, tagline, about_text, phone, email, address, hours
+  - **Images**: logo_url, hero_image_url, gallery_image_1-3_url (uploaded to Supabase Storage `pineyweb-assets/{client_id}/`)
+  - **Colors**: primary_color, secondary_color, background_color (color picker)
+  - Save Draft: upserts to pineyweb_site_content
+  - Publish: saves + POSTs to client's deploy_hook_url from pineyweb_clients
+  - Info banner directs users to Crisp chat for larger changes
 - `/dashboard/billing` — Plan, payment, invoices
 
 ### Admin (admin role only)

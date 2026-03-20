@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Image from "next/image";
@@ -8,40 +8,47 @@ import DashboardShell from "@/components/DashboardShell";
 
 type Tab = "images" | "text" | "colors";
 
-interface ContentRow {
-  content_type: string;
-  content_key: string;
-  content_value: string | null;
-}
+interface ContentRow { content_type: string; content_key: string; content_value: string | null; }
 
 const IMAGE_SLOTS = [
-  { key: "hero_banner", title: "Hero Banner", size: "1920 x 1080 px" },
-  { key: "service_gallery_1", title: "Service Gallery (1)", size: "800 x 600 px" },
-  { key: "business_logo", title: "Business Logo", size: "500 x 200 px (PNG)" },
+  { key: "logo_url", title: "Business Logo", size: "500 x 200 px (PNG)" },
+  { key: "hero_image_url", title: "Hero Image", size: "1920 x 1080 px" },
+  { key: "gallery_image_1_url", title: "Gallery Image 1", size: "800 x 600 px" },
+  { key: "gallery_image_2_url", title: "Gallery Image 2", size: "800 x 600 px" },
+  { key: "gallery_image_3_url", title: "Gallery Image 3", size: "800 x 600 px" },
 ];
 
 const TEXT_FIELDS = [
-  { key: "hero_headline", label: "Hero Headline", placeholder: "Your headline here...", maxLen: 60, rows: 1, fontSize: "text-3xl font-bold" },
-  { key: "primary_subtext", label: "Primary Subtext", placeholder: "Describe your business...", maxLen: 250, rows: 3, fontSize: "text-lg" },
+  { key: "business_name", label: "Business Name", placeholder: "Your Business Name", maxLen: 100, rows: 1, fontSize: "text-2xl font-bold" },
+  { key: "tagline", label: "Tagline", placeholder: "Your tagline or slogan...", maxLen: 120, rows: 1, fontSize: "text-xl" },
+  { key: "about_text", label: "About Text", placeholder: "Tell visitors about your business...", maxLen: 500, rows: 4, fontSize: "text-base" },
+  { key: "phone", label: "Phone Number", placeholder: "(903) 555-0123", maxLen: 20, rows: 1, fontSize: "text-base" },
+  { key: "email", label: "Email", placeholder: "you@business.com", maxLen: 100, rows: 1, fontSize: "text-base" },
+  { key: "address", label: "Address", placeholder: "123 Main St, Longview, TX 75601", maxLen: 200, rows: 1, fontSize: "text-base" },
+  { key: "hours", label: "Business Hours", placeholder: "Mon-Fri 8am-5pm, Sat 9am-1pm", maxLen: 200, rows: 2, fontSize: "text-base" },
 ];
 
 const DEFAULT_COLORS = [
-  { key: "color_primary", label: "Primary Color", name: "Sage Forest Green", hex: "#316342" },
-  { key: "color_secondary", label: "Secondary Color", name: "Aged Leather", hex: "#805533" },
-  { key: "color_accent", label: "Accent", name: "Muted Moss", hex: "#6E745F" },
+  { key: "primary_color", label: "Primary Color", name: "Primary", hex: "#316342" },
+  { key: "secondary_color", label: "Secondary Color", name: "Secondary", hex: "#805533" },
+  { key: "background_color", label: "Background Color", name: "Background", hex: "#F5F0E8" },
 ];
 
 export default function EditSite() {
   const router = useRouter();
   const [businessName, setBusinessName] = useState("");
   const [clientId, setClientId] = useState<string | null>(null);
+  const [deployHookUrl, setDeployHookUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>("images");
+  const [activeTab, setActiveTab] = useState<Tab>("text");
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
   const [hasChanges, setHasChanges] = useState(false);
+  const [uploading, setUploading] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadKey, setUploadKey] = useState("");
 
-  // Content state
   const [images, setImages] = useState<Record<string, string>>({});
   const [texts, setTexts] = useState<Record<string, string>>({});
   const [colors, setColors] = useState<{ key: string; label: string; name: string; hex: string }[]>(DEFAULT_COLORS);
@@ -69,10 +76,11 @@ export default function EditSite() {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push("/login"); return; }
-      const { data } = await supabase.from("pineyweb_clients").select("id, business_name, status").eq("user_id", session.user.id).single();
+      const { data } = await supabase.from("pineyweb_clients").select("id, business_name, status, deploy_hook_url").eq("user_id", session.user.id).single();
       if (!data || data.status !== "active") { router.push("/?pending=1"); return; }
       setBusinessName(data.business_name || "");
       setClientId(data.id);
+      setDeployHookUrl(data.deploy_hook_url || null);
       await loadContent(data.id);
       setLoading(false);
     };
@@ -81,61 +89,75 @@ export default function EditSite() {
 
   const handleLogout = async () => { await supabase.auth.signOut(); router.push("/login"); };
 
-  const saveContent = async (publish: boolean) => {
+  const saveDraft = async () => {
     if (!clientId) return;
     setSaving(true);
     setSaveMsg("");
-
-    // Collect all content to upsert
     const rows: { client_id: string; content_type: string; content_key: string; content_value: string }[] = [];
-    for (const [key, val] of Object.entries(images)) {
-      rows.push({ client_id: clientId, content_type: "image", content_key: key, content_value: val });
-    }
-    for (const [key, val] of Object.entries(texts)) {
-      rows.push({ client_id: clientId, content_type: "text", content_key: key, content_value: val });
-    }
-    for (const c of colors) {
-      rows.push({ client_id: clientId, content_type: "color", content_key: c.key, content_value: c.hex });
-    }
-
-    // Delete existing and insert fresh
+    for (const [key, val] of Object.entries(images)) rows.push({ client_id: clientId, content_type: "image", content_key: key, content_value: val });
+    for (const [key, val] of Object.entries(texts)) rows.push({ client_id: clientId, content_type: "text", content_key: key, content_value: val });
+    for (const c of colors) rows.push({ client_id: clientId, content_type: "color", content_key: c.key, content_value: c.hex });
     await supabase.from("pineyweb_site_content").delete().eq("client_id", clientId);
     const { error } = await supabase.from("pineyweb_site_content").insert(rows);
-
-    if (error) {
-      setSaveMsg("Save failed. Please try again.");
-    } else if (publish) {
-      // Trigger deploy hook if configured
-      const hookUrl = process.env.NEXT_PUBLIC_DEPLOY_HOOK_URL;
-      if (hookUrl) {
-        try { await fetch(hookUrl, { method: "POST" }); } catch { /* non-blocking */ }
-      }
-      setSaveMsg("Published successfully!");
-      setHasChanges(false);
-    } else {
-      setSaveMsg("Draft saved!");
-      setHasChanges(false);
-    }
+    setSaveMsg(error ? "Save failed." : "Draft saved!");
+    if (!error) setHasChanges(false);
     setSaving(false);
     setTimeout(() => setSaveMsg(""), 3000);
   };
 
-  const handlePreview = () => {
-    // Open current site in new tab as preview
-    window.open(window.location.origin, "_blank");
+  const handlePublish = async () => {
+    if (!clientId) return;
+    setPublishing(true);
+    setSaveMsg("");
+    // Save first
+    const rows: { client_id: string; content_type: string; content_key: string; content_value: string }[] = [];
+    for (const [key, val] of Object.entries(images)) rows.push({ client_id: clientId, content_type: "image", content_key: key, content_value: val });
+    for (const [key, val] of Object.entries(texts)) rows.push({ client_id: clientId, content_type: "text", content_key: key, content_value: val });
+    for (const c of colors) rows.push({ client_id: clientId, content_type: "color", content_key: c.key, content_value: c.hex });
+    await supabase.from("pineyweb_site_content").delete().eq("client_id", clientId);
+    await supabase.from("pineyweb_site_content").insert(rows);
+
+    if (!deployHookUrl) {
+      setSaveMsg("Your site isn't connected yet. Contact us via chat to complete setup.");
+    } else {
+      try {
+        await fetch(deployHookUrl, { method: "POST" });
+        setSaveMsg("Your site is being updated. Changes will be live in about 60 seconds.");
+        setHasChanges(false);
+      } catch {
+        setSaveMsg("Deploy failed. Please try again or contact support.");
+      }
+    }
+    setPublishing(false);
+    setTimeout(() => setSaveMsg(""), 5000);
+  };
+
+  const handleImageUpload = async (file: File, key: string) => {
+    if (!clientId) return;
+    setUploading(key);
+    const ext = file.name.split(".").pop() || "png";
+    const path = `${clientId}/${key}.${ext}`;
+    const { error } = await supabase.storage.from("pineyweb-assets").upload(path, file, { upsert: true });
+    if (!error) {
+      const { data: urlData } = supabase.storage.from("pineyweb-assets").getPublicUrl(path);
+      const url = urlData.publicUrl + `?t=${Date.now()}`;
+      setImages(prev => ({ ...prev, [key]: url }));
+      setHasChanges(true);
+    }
+    setUploading(null);
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#fef9f1" }}><p style={{ color: "#414942" }}>Loading...</p></div>;
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: "images", label: "IMAGES" },
     { key: "text", label: "TEXT" },
+    { key: "images", label: "IMAGES" },
     { key: "colors", label: "COLORS" },
   ];
 
   return (
     <DashboardShell businessName={businessName} onLogout={handleLogout}>
-      <header className="mb-12 flex items-center justify-between">
+      <header className="mb-8 flex items-center justify-between">
         <div>
           <span className="text-xs uppercase tracking-widest mb-2 block" style={{ color: "#805533" }}>Editor Mode</span>
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight" style={{ color: "#1d1c17" }}>Refine Your Presence</h1>
@@ -143,29 +165,60 @@ export default function EditSite() {
         <Image src="/transparentPINEYWEB.png" width={80} height={80} alt="Piney Web Co." unoptimized className="hidden md:block" />
       </header>
 
+      {/* Info Banner */}
+      <div className="mb-10 p-5 rounded-lg" style={{ backgroundColor: "#FAF8F5", borderLeft: "4px solid #4A7C59" }}>
+        <p className="text-sm leading-relaxed" style={{ color: "#414942" }}>
+          <strong style={{ color: "#316342" }}>Need to make a change?</strong> Use the chat bubble in the bottom right to reach us directly. For small updates like text and images, use the editor below. For larger changes — new pages, layout updates, or new features — send us a message and we&apos;ll handle it.
+        </p>
+      </div>
+
       {/* Tab Navigation */}
       <div className="flex gap-12 border-b mb-12" style={{ borderColor: "rgba(193,201,191,0.3)" }}>
         {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setActiveTab(t.key)}
-            className="pb-4 relative font-bold transition-colors"
-            style={{ color: activeTab === t.key ? "#316342" : "#414942" }}
-          >
+          <button key={t.key} onClick={() => setActiveTab(t.key)} className="pb-4 relative font-bold transition-colors" style={{ color: activeTab === t.key ? "#316342" : "#414942" }}>
             {t.label}
             {activeTab === t.key && <div className="absolute bottom-[-1.5px] left-0 right-0 h-[2px]" style={{ backgroundColor: "#316342" }} />}
           </button>
         ))}
       </div>
 
+      {/* Hidden file input for image uploads */}
+      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f && uploadKey) handleImageUpload(f, uploadKey); e.target.value = ""; }} />
+
+      {/* TEXT Tab */}
+      {activeTab === "text" && (
+        <section className="max-w-4xl space-y-10">
+          <h2 className="text-2xl font-bold pl-6" style={{ borderLeft: "2px solid #805533", color: "#1d1c17" }}>Content &amp; Copy</h2>
+          {TEXT_FIELDS.map((field) => (
+            <div key={field.key} className="space-y-2">
+              <div className="flex justify-between items-end">
+                <label className="text-xs uppercase tracking-widest" style={{ color: "#414942" }}>{field.label}</label>
+                <span className="text-[10px] uppercase tracking-widest" style={{ color: "#717971" }}>{(texts[field.key] || "").length} / {field.maxLen}</span>
+              </div>
+              <textarea
+                className={`w-full bg-transparent border-b border-[#717971] focus:border-[#316342] focus:ring-0 ${field.fontSize} py-3 transition-all resize-none`}
+                rows={field.rows}
+                placeholder={field.placeholder}
+                value={texts[field.key] || ""}
+                maxLength={field.maxLen}
+                onChange={(e) => { setTexts(prev => ({ ...prev, [field.key]: e.target.value })); setHasChanges(true); }}
+                style={{ color: "#1d1c17" }}
+              />
+            </div>
+          ))}
+        </section>
+      )}
+
       {/* IMAGES Tab */}
       {activeTab === "images" && (
         <section className="space-y-8">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {IMAGE_SLOTS.map((img) => (
-              <div key={img.key} className="p-2 group overflow-hidden" style={{ backgroundColor: "#f8f3eb" }}>
-                <div className="aspect-video relative overflow-hidden mb-4 flex items-center justify-center" style={{ backgroundColor: "#e7e2da" }}>
-                  {images[img.key] ? (
+              <div key={img.key} className="p-2 group overflow-hidden rounded-lg" style={{ backgroundColor: "#f8f3eb" }}>
+                <div className="aspect-video relative overflow-hidden mb-4 flex items-center justify-center rounded" style={{ backgroundColor: "#e7e2da" }}>
+                  {uploading === img.key ? (
+                    <span className="text-sm" style={{ color: "#316342" }}>Uploading...</span>
+                  ) : images[img.key] ? (
                     <img src={images[img.key]} alt={img.title} className="w-full h-full object-cover" />
                   ) : (
                     <div className="text-center">
@@ -175,41 +228,19 @@ export default function EditSite() {
                   )}
                 </div>
                 <div className="px-3 pb-3">
-                  <div className="flex justify-between items-start mb-2">
+                  <div className="flex justify-between items-start">
                     <div>
-                      <h3 className="font-bold text-lg" style={{ color: "#1d1c17" }}>{img.title}</h3>
-                      <p className="text-xs uppercase tracking-tighter" style={{ color: "#414942", opacity: 0.7 }}>{img.size}</p>
+                      <h3 className="font-bold text-base" style={{ color: "#1d1c17" }}>{img.title}</h3>
+                      <p className="text-[10px] uppercase tracking-tighter" style={{ color: "#414942", opacity: 0.7 }}>{img.size}</p>
                     </div>
-                    <button className="font-bold text-sm underline underline-offset-4 transition-colors" style={{ color: "#316342" }}>Replace</button>
+                    <button onClick={() => { setUploadKey(img.key); fileInputRef.current?.click(); }} disabled={!!uploading} className="font-bold text-sm underline underline-offset-4 transition-colors disabled:opacity-50" style={{ color: "#316342" }}>
+                      {images[img.key] ? "Replace" : "Upload"}
+                    </button>
                   </div>
                 </div>
               </div>
             ))}
           </div>
-        </section>
-      )}
-
-      {/* TEXT Tab */}
-      {activeTab === "text" && (
-        <section className="max-w-4xl space-y-12">
-          <h2 className="text-2xl font-bold pl-6" style={{ borderLeft: "2px solid #805533", color: "#1d1c17" }}>Content &amp; Copy</h2>
-          {TEXT_FIELDS.map((field) => (
-            <div key={field.key} className="space-y-2">
-              <div className="flex justify-between items-end">
-                <label className="text-xs uppercase tracking-widest" style={{ color: "#414942" }}>{field.label}</label>
-                <span className="text-[10px] uppercase tracking-widest" style={{ color: "#717971" }}>{(texts[field.key] || "").length} / {field.maxLen} characters</span>
-              </div>
-              <textarea
-                className={`w-full bg-transparent border-b border-[#717971] focus:border-[#316342] focus:ring-0 ${field.fontSize} py-4 transition-all resize-none`}
-                rows={field.rows}
-                placeholder={field.placeholder}
-                value={texts[field.key] || ""}
-                maxLength={field.maxLen}
-                onChange={(e) => { setTexts((prev) => ({ ...prev, [field.key]: e.target.value })); setHasChanges(true); }}
-                style={{ color: "#1d1c17" }}
-              />
-            </div>
-          ))}
         </section>
       )}
 
@@ -222,17 +253,7 @@ export default function EditSite() {
               {colors.map((c, i) => (
                 <div key={c.key} className="flex items-center gap-6">
                   <label className="w-16 h-16 rounded-md flex-shrink-0 cursor-pointer relative" style={{ backgroundColor: c.hex, border: "4px solid #f8f3eb", boxShadow: "0 1px 2px rgba(0,0,0,0.06)" }}>
-                    <input
-                      type="color"
-                      value={c.hex}
-                      onChange={(e) => {
-                        const updated = [...colors];
-                        updated[i] = { ...updated[i], hex: e.target.value };
-                        setColors(updated);
-                        setHasChanges(true);
-                      }}
-                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                    />
+                    <input type="color" value={c.hex} onChange={(e) => { const u = [...colors]; u[i] = { ...u[i], hex: e.target.value }; setColors(u); setHasChanges(true); }} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
                   </label>
                   <div className="flex-1">
                     <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: "#414942" }}>{c.label}</label>
@@ -245,12 +266,10 @@ export default function EditSite() {
               ))}
             </div>
           </div>
-
-          {/* Preview Card */}
           <div className="p-8 rounded-xl space-y-6 sticky top-32" style={{ backgroundColor: "#f8f3eb" }}>
             <span className="text-[10px] uppercase tracking-widest font-bold px-3 py-1 rounded-full text-white" style={{ backgroundColor: colors[0]?.hex || "#316342" }}>Live Preview</span>
-            <div className="p-6 border rounded-lg space-y-4" style={{ backgroundColor: "#fef9f1", borderColor: "rgba(193,201,191,0.2)", boxShadow: "0 4px 12px rgba(0,0,0,0.06)" }}>
-              <div className="h-4 w-1/3 rounded-sm" style={{ backgroundColor: colors[0]?.hex || "#316342", opacity: 0.2 }} />
+            <div className="p-6 border rounded-lg space-y-4" style={{ backgroundColor: colors[2]?.hex || "#F5F0E8", borderColor: "rgba(193,201,191,0.2)", boxShadow: "0 4px 12px rgba(0,0,0,0.06)" }}>
+              <div className="h-4 w-1/3 rounded-sm" style={{ backgroundColor: colors[0]?.hex, opacity: 0.2 }} />
               <div className="h-8 w-2/3 rounded-sm" style={{ backgroundColor: "#1d1c17" }} />
               <div className="space-y-2">
                 <div className="h-2 w-full rounded-sm" style={{ backgroundColor: "#414942", opacity: 0.1 }} />
@@ -258,11 +277,11 @@ export default function EditSite() {
                 <div className="h-2 w-4/5 rounded-sm" style={{ backgroundColor: "#414942", opacity: 0.1 }} />
               </div>
               <div className="pt-4 flex gap-4">
-                <div className="h-10 w-24 rounded-md" style={{ backgroundColor: colors[0]?.hex || "#316342" }} />
-                <div className="h-10 w-24 border rounded-md" style={{ borderColor: colors[1]?.hex || "#805533" }} />
+                <div className="h-10 w-24 rounded-md" style={{ backgroundColor: colors[0]?.hex }} />
+                <div className="h-10 w-24 border rounded-md" style={{ borderColor: colors[1]?.hex }} />
               </div>
             </div>
-            <p className="text-xs italic text-center px-8" style={{ color: "#414942" }}>Preview reflects the impact of your brand colors on the website architecture.</p>
+            <p className="text-xs italic text-center px-8" style={{ color: "#414942" }}>Preview reflects your brand colors on the website.</p>
           </div>
         </section>
       )}
@@ -273,23 +292,20 @@ export default function EditSite() {
         <div className="backdrop-blur-xl border px-8 py-5 flex items-center justify-between rounded-xl" style={{ backgroundColor: "rgba(254,249,241,0.9)", borderColor: "rgba(193,201,191,0.3)", boxShadow: "0 20px 50px rgba(48,20,0,0.1)" }}>
           <div className="flex items-center gap-4">
             {hasChanges ? (
-              <>
-                <span className="flex h-2 w-2 rounded-full animate-pulse" style={{ backgroundColor: "#ba1a1a" }} />
-                <p className="text-sm italic" style={{ color: "#1d1c17" }}>Unsaved changes detected</p>
-              </>
+              <><span className="flex h-2 w-2 rounded-full animate-pulse" style={{ backgroundColor: "#ba1a1a" }} /><p className="text-sm italic" style={{ color: "#1d1c17" }}>Unsaved changes</p></>
             ) : saveMsg ? (
-              <p className="text-sm italic" style={{ color: "#316342" }}>{saveMsg}</p>
+              <p className="text-sm italic" style={{ color: saveMsg.includes("isn't connected") || saveMsg.includes("failed") ? "#805533" : "#316342" }}>{saveMsg}</p>
             ) : (
               <p className="text-sm italic" style={{ color: "#717971" }}>All changes saved</p>
             )}
           </div>
           <div className="flex gap-4">
-            <button onClick={() => saveContent(false)} disabled={saving} className="px-6 py-2.5 font-bold border-b transition-all disabled:opacity-50" style={{ color: "#316342", borderColor: "#316342" }}>
-              {saving ? "Saving..." : "Draft"}
+            <button onClick={saveDraft} disabled={saving} className="px-6 py-2.5 font-bold border-b transition-all disabled:opacity-50" style={{ color: "#316342", borderColor: "#316342" }}>
+              {saving ? "Saving..." : "Save Draft"}
             </button>
-            <button onClick={handlePreview} className="px-6 py-2.5 font-bold transition-colors" style={{ color: "#414942" }}>Preview</button>
-            <button onClick={() => saveContent(true)} disabled={saving} className="px-10 py-2.5 rounded-md font-bold text-white transition-all active:scale-95 disabled:opacity-50" style={{ backgroundColor: "#316342" }}>
-              {saving ? "Publishing..." : "Publish"}
+            <button onClick={() => window.open(window.location.origin, "_blank")} className="px-6 py-2.5 font-bold transition-colors" style={{ color: "#414942" }}>Preview</button>
+            <button onClick={handlePublish} disabled={publishing} className="px-10 py-2.5 rounded-md font-bold text-white transition-all active:scale-95 disabled:opacity-50" style={{ backgroundColor: "#316342" }}>
+              {publishing ? "Publishing..." : "Publish"}
             </button>
           </div>
         </div>
