@@ -146,7 +146,13 @@ During the build, Piney Web Co. is added as a collaborator/team member on the cl
 - **Stripe**: Client invites info@pineyweb.com as Administrator
 - **Vercel**: Piney Web Co. manages deployment during build
 
-On handoff (one-time clients only): Piney Web Co. removes itself from all collaborator roles. The handoff email confirms project completion — no credentials are exchanged.
+On handoff (one-time clients only): Admin opens handoff modal in `/admin/clients` which requires:
+1. Client's GitHub username (for repo transfer)
+2. Client's Vercel username (for project transfer)
+3. Checklist completion: GitHub repo transferred, Vercel project transferred, Namecheap domain sharing removed, Stripe removed (if applicable), Supabase removed (if applicable)
+4. All checks must pass before "Send Handoff Email" button activates
+
+One-time clients are guided to create GitHub and Vercel accounts during onboarding Step 3.
 
 ## E2E Tests (Playwright)
 

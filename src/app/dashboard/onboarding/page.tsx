@@ -317,6 +317,40 @@ export default function Onboarding() {
                     </div>
                   )}
                 </section>
+                {/* GitHub — always visible */}
+                <section className="space-y-4 pt-8" style={{ borderTop: "1px solid rgba(193,201,191,0.1)" }}>
+                  <div className="p-5 rounded-md" style={{ backgroundColor: "#f8f3eb", borderLeft: "4px solid rgba(128,85,51,0.4)" }}>
+                    <p className="text-[10px] uppercase tracking-widest font-bold mb-3" style={{ color: "#8B5E3C" }}>For One-Time Build clients only</p>
+                    <div className="flex items-start gap-4 mb-3">
+                      <span className="material-symbols-outlined" style={{ color: "#805533" }}>code</span>
+                      <p className="text-sm" style={{ color: "#414942" }}>You&apos;ll need a free GitHub account so we can transfer your website&apos;s source code to you at project completion. If you&apos;re on a Managed plan, you can skip this.</p>
+                    </div>
+                    <div className="pl-10 text-sm" style={{ color: "#414942" }}>
+                      <ol className="list-decimal pl-4 space-y-1 mb-3">
+                        <li>Go to github.com and create a free account</li>
+                        <li>Send us your GitHub username via the chat</li>
+                      </ol>
+                      <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="font-bold underline underline-offset-4" style={{ color: "#316342" }}>github.com &rarr; Sign up free</a>
+                    </div>
+                  </div>
+                </section>
+                {/* Vercel — always visible */}
+                <section className="space-y-4 pt-4">
+                  <div className="p-5 rounded-md" style={{ backgroundColor: "#f8f3eb", borderLeft: "4px solid rgba(128,85,51,0.4)" }}>
+                    <p className="text-[10px] uppercase tracking-widest font-bold mb-3" style={{ color: "#8B5E3C" }}>For One-Time Build clients only</p>
+                    <div className="flex items-start gap-4 mb-3">
+                      <span className="material-symbols-outlined" style={{ color: "#805533" }}>cloud</span>
+                      <p className="text-sm" style={{ color: "#414942" }}>You&apos;ll need a free Vercel account so we can transfer your website hosting to you at project completion. If you&apos;re on a Managed plan, you can skip this.</p>
+                    </div>
+                    <div className="pl-10 text-sm" style={{ color: "#414942" }}>
+                      <ol className="list-decimal pl-4 space-y-1 mb-3">
+                        <li>Go to vercel.com and create a free account</li>
+                        <li>Send us your Vercel username via the chat</li>
+                      </ol>
+                      <a href="https://vercel.com" target="_blank" rel="noopener noreferrer" className="font-bold underline underline-offset-4" style={{ color: "#316342" }}>vercel.com &rarr; Sign up free</a>
+                    </div>
+                  </div>
+                </section>
                 {/* Extra notes */}
                 <section className="space-y-4 pt-4">
                   <label className="text-xl font-semibold" style={{ color: "#1d1c17" }}>Anything else we should know?</label>

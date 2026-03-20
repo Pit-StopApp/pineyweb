@@ -29,6 +29,11 @@ export default function AdminClients() {
   const [sending, setSending] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const [page, setPage] = useState(0);
+  // Handoff modal
+  const [handoffClient, setHandoffClient] = useState<Client | null>(null);
+  const [handoffGithub, setHandoffGithub] = useState("");
+  const [handoffVercel, setHandoffVercel] = useState("");
+  const [handoffChecks, setHandoffChecks] = useState<boolean[]>([false, false, false, false, false]);
 
   useEffect(() => {
     const init = async () => {
@@ -182,12 +187,11 @@ export default function AdminClients() {
                           )}
                           {status === "live" && c.tier === "One-Time" && (
                             <button
-                              onClick={() => sendEmail(c.id, "handoff")}
-                              disabled={!!sending}
-                              className="px-4 py-1.5 rounded-md text-xs font-bold text-white transition-all disabled:opacity-50"
+                              onClick={() => { setHandoffClient(c); setHandoffGithub(""); setHandoffVercel(""); setHandoffChecks([false, false, false, false, false]); }}
+                              className="px-4 py-1.5 rounded-md text-xs font-bold text-white transition-all"
                               style={{ backgroundColor: "#414942" }}
                             >
-                              {sending === `${c.id}-handoff` ? "Sending..." : "Send Handoff"}
+                              Send Handoff
                             </button>
                           )}
                           <Link
@@ -238,6 +242,55 @@ export default function AdminClients() {
           </div>
         </div>
       </main>
+
+      {/* Handoff Modal */}
+      {handoffClient && (() => {
+        const allChecked = handoffChecks.every(Boolean);
+        const checkLabels = [
+          "GitHub repository transferred to client's account",
+          "Vercel project transferred to client's account",
+          "Removed from Namecheap domain sharing",
+          "Removed from Stripe (if applicable)",
+          "Removed from Supabase (if applicable)",
+        ];
+        return (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+            <div className="w-full max-w-lg p-8 rounded-xl" style={{ backgroundColor: "#F5F0E8" }}>
+              <h3 className="text-xl font-bold mb-1" style={{ color: "#1d1c17" }}>Send Handoff — {handoffClient.full_name || handoffClient.business_name}</h3>
+              <p className="text-sm mb-6" style={{ color: "#414942" }}>Complete all steps below before sending the handoff email.</p>
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: "#414942" }}>Client&apos;s GitHub Username</label>
+                  <input value={handoffGithub} onChange={e => setHandoffGithub(e.target.value)} placeholder="github-username" className="w-full px-4 py-2.5 rounded-lg border text-sm" style={{ borderColor: "#c1c9bf", backgroundColor: "#fff" }} />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: "#414942" }}>Client&apos;s Vercel Username</label>
+                  <input value={handoffVercel} onChange={e => setHandoffVercel(e.target.value)} placeholder="vercel-username" className="w-full px-4 py-2.5 rounded-lg border text-sm" style={{ borderColor: "#c1c9bf", backgroundColor: "#fff" }} />
+                </div>
+              </div>
+              <div className="space-y-3 mb-6">
+                {checkLabels.map((label, i) => (
+                  <label key={i} className="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" checked={handoffChecks[i]} onChange={() => { const u = [...handoffChecks]; u[i] = !u[i]; setHandoffChecks(u); }} style={{ accentColor: "#4A7C59" }} />
+                    <span className="text-sm" style={{ color: "#1d1c17" }}>{label}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={async () => { await sendEmail(handoffClient.id, "handoff"); setMsg(`Handoff email sent to ${handoffClient.email}`); setHandoffClient(null); setTimeout(() => setMsg(""), 4000); }}
+                  disabled={!allChecked || !!sending}
+                  className="flex-1 py-3 rounded-md text-sm font-bold text-white transition-all disabled:opacity-40"
+                  style={{ backgroundColor: "#4A7C59" }}
+                >
+                  {sending ? "Sending..." : "Send Handoff Email"}
+                </button>
+                <button onClick={() => setHandoffClient(null)} className="px-6 py-3 rounded-md text-sm font-bold border" style={{ color: "#414942", borderColor: "#c1c9bf" }}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
