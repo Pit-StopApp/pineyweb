@@ -1,25 +1,66 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import CrispChat from "@/components/CrispChat";
 
 export default function Activate() {
+  const router = useRouter();
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/login?redirect=/activate");
+        return;
+      }
+      setUserId(session.user.id);
+      setCheckingAuth(false);
+    };
+    checkAuth();
+  }, [router]);
 
   const handleActivate = async () => {
     if (!code.trim()) { setError("Please enter your confirmation number."); return; }
+    if (!userId) { setError("Not logged in. Please log in first."); return; }
     setLoading(true);
     setError("");
-    // Placeholder — activation logic would validate the code against the DB
-    setTimeout(() => {
-      setError("Invalid confirmation number. Please check your invoice email and try again.");
+
+    try {
+      const res = await fetch("/api/activate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmationNumber: code.trim(), userId }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        router.push("/dashboard");
+      } else {
+        setError(data.error || "Activation failed. Please try again.");
+      }
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+    } finally {
       setLoading(false);
-    }, 1500);
+    }
   };
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#fef9f1" }}>
+        <p style={{ color: "#414942" }}>Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6" style={{ backgroundColor: "#fef9f1", fontFamily: "'Lora', serif" }}>
@@ -53,7 +94,8 @@ export default function Activate() {
                 <input
                   type="text"
                   value={code}
-                  onChange={(e) => setCode(e.target.value)}
+                  onChange={(e) => { setCode(e.target.value); setError(""); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleActivate(); }}
                   placeholder="e.g. PW-8829-X"
                   className="w-full bg-transparent border-0 border-b-[1.5px] py-4 px-0 text-xl focus:ring-0 transition-all duration-300"
                   style={{ borderColor: "#717971", color: "#1d1c17" }}
@@ -70,8 +112,8 @@ export default function Activate() {
 
               <button
                 onClick={handleActivate}
-                disabled={loading}
-                className="w-full py-5 rounded-md font-medium text-lg transition-all duration-300 flex items-center justify-center gap-3 text-white active:scale-[0.98] disabled:opacity-60"
+                disabled={loading || !code.trim()}
+                className="w-full py-5 rounded-md font-medium text-lg transition-all duration-300 flex items-center justify-center gap-3 text-white active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
                 style={{ backgroundColor: "#4a7c59", boxShadow: "0 4px 12px rgba(49,99,66,0.2)" }}
               >
                 <span>{loading ? "Verifying..." : "Activate Account"}</span>
