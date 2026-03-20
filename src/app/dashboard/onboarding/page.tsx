@@ -250,8 +250,25 @@ export default function Onboarding() {
                     <div className="p-5 rounded-md flex items-start gap-4" style={{ backgroundColor: "#f8f3eb", borderLeft: "4px solid rgba(128,85,51,0.4)" }}>
                       <span className="material-symbols-outlined" style={{ color: "#805533" }}>language</span>
                       <div>
-                        <p className="text-sm mb-2" style={{ color: "#414942" }}>We recommend securing your brand name immediately.</p>
-                        <a href="https://namecheap.com" target="_blank" rel="noopener noreferrer" className="text-sm font-bold underline underline-offset-4" style={{ color: "#316342" }}>Head to Namecheap.com</a>
+                        <p className="text-sm mb-2" style={{ color: "#414942" }}>You&apos;ll need a domain before we can launch your site. Head to Namecheap and grab one before someone else does.</p>
+                        <a href="https://namecheap.com" target="_blank" rel="noopener noreferrer" className="text-sm font-bold underline underline-offset-4" style={{ color: "#316342" }}>namecheap.com &rarr; Find your domain</a>
+                      </div>
+                    </div>
+                  )}
+                  {hasDomain && (
+                    <div className="p-5 rounded-md" style={{ backgroundColor: "#f8f3eb", borderLeft: "4px solid rgba(74,124,89,0.4)" }}>
+                      <div className="flex items-start gap-4 mb-3">
+                        <span className="material-symbols-outlined" style={{ color: "#4A7C59" }}>language</span>
+                        <p className="text-sm" style={{ color: "#414942" }}>Perfect. To give us access to your domain settings:</p>
+                      </div>
+                      <div className="pl-10 text-sm" style={{ color: "#414942" }}>
+                        <ol className="list-decimal pl-4 space-y-1 mb-3">
+                          <li>Log into Namecheap</li>
+                          <li>Go to Account &rarr; Sharing &amp; Transfer</li>
+                          <li>Share access with <strong>info@pineyweb.com</strong></li>
+                          <li>Send us a message in the chat to let us know it&apos;s done</li>
+                        </ol>
+                        <p className="italic text-xs" style={{ color: "#717971" }}>Not on Namecheap? No problem — just send us a message in the chat and we&apos;ll walk you through it.</p>
                       </div>
                     </div>
                   )}
