@@ -48,6 +48,15 @@
 | content_value | TEXT | The content value |
 | updated_at | TIMESTAMP | Last modified |
 
+## Row Level Security (RLS)
+
+All three tables have RLS enabled:
+- **pineyweb_clients**: users can SELECT/UPDATE/INSERT own record (by user_id). Admin users (role='admin') can SELECT/UPDATE all records. Service role has full access.
+- **pineyweb_orders**: users can SELECT own orders (by user_id). Service role has full access (webhook inserts, activation updates).
+- **pineyweb_site_content**: users can SELECT/INSERT/UPDATE/DELETE rows where client_id matches their pineyweb_clients.id. Service role has full access.
+
+Client-side (anon key) is restricted to own data. Server-side (service role key) bypasses RLS for webhooks, admin operations, and email flows.
+
 ## Email Templates (Resend hosted templates)
 
 Templates are hosted in Resend, not rendered in code. Each `resend.emails.send()` call uses `template_id` + `variables`.
