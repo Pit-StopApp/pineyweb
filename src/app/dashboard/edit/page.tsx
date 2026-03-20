@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import Image from "next/image";
 import DashboardShell from "@/components/DashboardShell";
 
 type Tab = "images" | "text" | "colors";
@@ -37,9 +38,12 @@ export default function EditSite() {
 
   return (
     <DashboardShell businessName={businessName} onLogout={handleLogout}>
-      <header className="mb-12">
-        <span className="text-xs uppercase tracking-widest mb-2 block" style={{ color: "#805533" }}>Editor Mode</span>
-        <h1 className="text-4xl md:text-5xl font-bold tracking-tight" style={{ color: "#1d1c17" }}>Refine Your Presence</h1>
+      <header className="mb-12 flex items-center justify-between">
+        <div>
+          <span className="text-xs uppercase tracking-widest mb-2 block" style={{ color: "#805533" }}>Editor Mode</span>
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight" style={{ color: "#1d1c17" }}>Refine Your Presence</h1>
+        </div>
+        <Image src="/transparentPINEYWEB.png" width={80} height={80} alt="Piney Web Co." unoptimized className="hidden md:block" />
       </header>
 
       {/* Tab Navigation */}
