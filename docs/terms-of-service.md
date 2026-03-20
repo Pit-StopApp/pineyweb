@@ -25,10 +25,12 @@ All services are scoped during a consultation prior to invoicing. Work begins on
 - Monthly fees are billed on the same date each month following the setup period
 - We accept payment via Stripe. By providing payment information, you authorize us to charge the agreed amount
 
+For Managed clients, failure to pay the monthly fee within 10 days of the due date will result in suspension of website hosting. The website will be restored immediately upon payment. Continued non-payment beyond 30 days may result in permanent termination of services.
+
 ## 4. Refunds
 
 - **One-Time Builds:** If work has not yet begun, a full refund may be issued upon request. Once work has begun, refunds are not available
-- **Managed Services:** You may cancel your monthly subscription at any time. Cancellation takes effect at the end of the current billing period. Setup fees are non-refundable
+- **Managed Services:** You may cancel your monthly subscription at any time. Cancellation takes effect at the end of the current billing period. If you cancel and wish to retain ownership of your website, and the total amount paid has not yet reached the equivalent cost of a one-time build, you will be responsible for paying the difference before the handoff is completed. If your total payments have met or exceeded the one-time build price, the website is yours at no additional cost. Setup fees are non-refundable
 - **Add-ons:** Non-refundable once work has begun
 
 ## 5. Client Responsibilities
