@@ -62,6 +62,7 @@ export default function Onboarding() {
 
   const saveStep = async () => {
     if (!clientId) return;
+    console.log("[Onboarding] Saving step", step, "for client_id:", clientId);
     setSaving(true);
     const keys = step === 1
       ? ["business_name", "tagline", "phone", "email", "address", "hours", "services_offered", "service_area", "business_description"]

@@ -56,17 +56,37 @@ export default function EditSite() {
   const [colors, setColors] = useState<{ key: string; label: string; name: string; hex: string }[]>(DEFAULT_COLORS);
 
   const loadContent = useCallback(async (cId: string) => {
+    console.log("[Edit] Loading content for client_id:", cId);
     const { data } = await supabase.from("pineyweb_site_content").select("content_type, content_key, content_value").eq("client_id", cId);
     if (!data) return;
+    const rows = data as ContentRow[];
+    console.log("[Edit] Loaded", rows.length, "content rows");
     const imgMap: Record<string, string> = {};
     const txtMap: Record<string, string> = {};
     const colorUpdates = [...DEFAULT_COLORS];
-    for (const row of data as ContentRow[]) {
-      if (row.content_type === "image") imgMap[row.content_key] = row.content_value || "";
-      if (row.content_type === "text") txtMap[row.content_key] = row.content_value || "";
+    const textKeys = TEXT_FIELDS.map(f => f.key);
+    const imageKeys = IMAGE_SLOTS.map(f => f.key);
+    const colorKeys = DEFAULT_COLORS.map(f => f.key);
+    for (const row of rows) {
+      const val = row.content_value || "";
+      // Map by content_type first
+      if (row.content_type === "image") { imgMap[row.content_key] = val; continue; }
+      if (row.content_type === "text") { txtMap[row.content_key] = val; continue; }
       if (row.content_type === "color") {
         const idx = colorUpdates.findIndex((c) => c.key === row.content_key);
-        if (idx >= 0 && row.content_value) colorUpdates[idx] = { ...colorUpdates[idx], hex: row.content_value };
+        if (idx >= 0 && val) colorUpdates[idx] = { ...colorUpdates[idx], hex: val };
+        continue;
+      }
+      // For onboarding rows, map by content_key to the right bucket
+      if (row.content_type === "onboarding" && val) {
+        if (imageKeys.includes(row.content_key)) { imgMap[row.content_key] = val; }
+        else if (colorKeys.includes(row.content_key)) {
+          const idx = colorUpdates.findIndex((c) => c.key === row.content_key);
+          if (idx >= 0) colorUpdates[idx] = { ...colorUpdates[idx], hex: val };
+        }
+        else if (textKeys.includes(row.content_key) || ["business_name", "tagline", "phone", "email", "address", "hours", "about_text"].includes(row.content_key)) {
+          txtMap[row.content_key] = val;
+        }
       }
     }
     setImages(imgMap);
