@@ -121,6 +121,22 @@ Admin-only. Sends BuildStarted or SiteLive email to a client. Verifies admin rol
 6. Admin sends "Build Started" email when work begins
 7. Admin sends "Site Live" email when site launches
 
+## E2E Tests (Playwright)
+
+Run: `npm run test:e2e` or `npm run test:e2e:ui`
+
+Test suites in `tests/e2e/`:
+- **auth.spec.ts** — Auth gates: unauthenticated redirects, non-admin gate, admin access
+- **webhook.spec.ts** — Stripe invoice.paid webhook → order creation, confirmation number format, stripe_customer_id population
+- **activation.spec.ts** — /activate flow: confirmation number lookup, account activation, redirect
+- **admin.spec.ts** — Admin panel: table rendering, search, Send Build Started/Site Live status updates
+- **dashboard.spec.ts** — Client dashboard: pending redirect, onboarding Step 1 save, billing page load
+- **legal.spec.ts** — Public pages: /privacy and /terms headings and back links
+
+Config: `playwright.config.ts` — Chromium only, 30s timeout, screenshot on failure, retry once on CI.
+
+Env vars for tests in `.env.test.local` (gitignored): `TEST_ADMIN_EMAIL`, `TEST_ADMIN_PASSWORD`, `TEST_CLIENT_EMAIL`, `TEST_CLIENT_PASSWORD`, `TEST_BASE_URL`, `STRIPE_TEST_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET_PINEYWEB`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+
 ## Environment Variables
 ```
 NEXT_PUBLIC_SUPABASE_URL
