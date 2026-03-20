@@ -138,6 +138,15 @@ Supabase's built-in email confirmation is disabled. Instead:
 6. Account activated, client accesses full dashboard
 7. Admin sends "Build Started" email when work begins
 8. Admin sends "Site Live" email when site launches
+9. For one-time clients: admin sends "Handoff" email confirming project completion
+
+## Collaborator Model
+During the build, Piney Web Co. is added as a collaborator/team member on the client's accounts:
+- **Supabase**: Client invites info@pineyweb.com as team member on their project
+- **Stripe**: Client invites info@pineyweb.com as Administrator
+- **Vercel**: Piney Web Co. manages deployment during build
+
+On handoff (one-time clients only): Piney Web Co. removes itself from all collaborator roles. The handoff email confirms project completion — no credentials are exchanged.
 
 ## E2E Tests (Playwright)
 

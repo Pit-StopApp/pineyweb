@@ -37,17 +37,11 @@ export async function POST(request: NextRequest) {
       variables = { firstName, siteUrl: client.site_url || "https://pineyweb.com" };
       await supabase.from("pineyweb_clients").update({ status: "live" }).eq("id", clientId);
     } else if (emailType === "handoff") {
-      subject = "Your Website Credentials — Piney Web Co.";
+      subject = "Project Complete — Piney Web Co.";
       templateId = "d1fa68d9-098a-4101-b21b-a22c84df4003";
       variables = {
         firstName,
-        domain: client.site_url || "",
-        vercelEmail: "",
-        vercelPassword: "",
-        namecheapEmail: "",
-        namecheapPassword: "",
-        googleEmail: "",
-        googlePassword: "",
+        siteUrl: client.site_url || "",
       };
     } else {
       return NextResponse.json({ error: "Invalid email type" }, { status: 400 });

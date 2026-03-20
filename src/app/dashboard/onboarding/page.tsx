@@ -260,11 +260,20 @@ export default function Onboarding() {
                 <section className="space-y-4 pt-8" style={{ borderTop: "1px solid rgba(193,201,191,0.1)" }}>
                   <Toggle label="Will your site need user logins?" value={needsLogins} onChange={setNeedsLogins} />
                   {needsLogins && (
-                    <div className="p-5 rounded-md flex items-start gap-4" style={{ backgroundColor: "#f8f3eb", borderLeft: "4px solid rgba(74,124,89,0.4)" }}>
-                      <span className="material-symbols-outlined" style={{ color: "#4A7C59" }}>database</span>
-                      <div>
-                        <p className="text-sm mb-2" style={{ color: "#414942" }}>We use Supabase for secure authentication and data storage.</p>
-                        <a href="https://supabase.com" target="_blank" rel="noopener noreferrer" className="text-sm font-bold underline underline-offset-4" style={{ color: "#316342" }}>You&apos;ll need a Supabase account</a>
+                    <div className="p-5 rounded-md" style={{ backgroundColor: "#f8f3eb", borderLeft: "4px solid rgba(74,124,89,0.4)" }}>
+                      <div className="flex items-start gap-4 mb-3">
+                        <span className="material-symbols-outlined" style={{ color: "#4A7C59" }}>database</span>
+                        <p className="text-sm" style={{ color: "#414942" }}>You&apos;ll need a free Supabase account for user authentication and data storage.</p>
+                      </div>
+                      <div className="pl-10 text-sm" style={{ color: "#414942" }}>
+                        <p className="font-semibold mb-2" style={{ color: "#1d1c17" }}>Once your account is created:</p>
+                        <ol className="list-decimal pl-4 space-y-1 mb-3">
+                          <li>Create a new project</li>
+                          <li>Go to Project Settings &rarr; Team</li>
+                          <li>Invite <strong>info@pineyweb.com</strong> as a team member</li>
+                          <li>Send us a message in the chat with your project URL so we can get started</li>
+                        </ol>
+                        <a href="https://supabase.com" target="_blank" rel="noopener noreferrer" className="font-bold underline underline-offset-4" style={{ color: "#316342" }}>supabase.com &rarr; Sign up free</a>
                       </div>
                     </div>
                   )}
@@ -273,11 +282,19 @@ export default function Onboarding() {
                 <section className="space-y-4 pt-8" style={{ borderTop: "1px solid rgba(193,201,191,0.1)" }}>
                   <Toggle label="Will you sell products or take payments?" value={needsPayments} onChange={setNeedsPayments} />
                   {needsPayments && (
-                    <div className="p-5 rounded-md flex items-start gap-4" style={{ backgroundColor: "#f8f3eb", borderLeft: "4px solid rgba(128,85,51,0.4)" }}>
-                      <span className="material-symbols-outlined" style={{ color: "#805533" }}>payments</span>
-                      <div>
-                        <p className="text-sm mb-2" style={{ color: "#414942" }}>We integrate with Stripe for PCI-compliant payments.</p>
-                        <a href="https://stripe.com" target="_blank" rel="noopener noreferrer" className="text-sm font-bold underline underline-offset-4" style={{ color: "#316342" }}>You&apos;ll need a Stripe account</a>
+                    <div className="p-5 rounded-md" style={{ backgroundColor: "#f8f3eb", borderLeft: "4px solid rgba(128,85,51,0.4)" }}>
+                      <div className="flex items-start gap-4 mb-3">
+                        <span className="material-symbols-outlined" style={{ color: "#805533" }}>payments</span>
+                        <p className="text-sm" style={{ color: "#414942" }}>You&apos;ll need your own Stripe account to process payments. Stripe is free to set up — you only pay a small fee per transaction.</p>
+                      </div>
+                      <div className="pl-10 text-sm" style={{ color: "#414942" }}>
+                        <p className="font-semibold mb-2" style={{ color: "#1d1c17" }}>Once your account is created:</p>
+                        <ol className="list-decimal pl-4 space-y-1 mb-3">
+                          <li>Go to Settings &rarr; Team</li>
+                          <li>Invite <strong>info@pineyweb.com</strong> as an Administrator</li>
+                          <li>Send us a message in the chat so we can integrate payments into your site</li>
+                        </ol>
+                        <a href="https://stripe.com" target="_blank" rel="noopener noreferrer" className="font-bold underline underline-offset-4" style={{ color: "#316342" }}>stripe.com &rarr; Create account</a>
                       </div>
                     </div>
                   )}
