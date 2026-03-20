@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
+import CrispChat from "@/components/CrispChat";
 
 export default function Activate() {
   const [code, setCode] = useState("");
@@ -25,7 +27,7 @@ export default function Activate() {
         {/* Brand */}
         <div className="flex flex-col items-center mb-12">
           <div className="mb-4">
-            <span className="material-symbols-outlined text-5xl" style={{ color: "#4a7c59" }}>architecture</span>
+            <Image src="/PINEYWEBLOGO.png" width={120} height={120} alt="Piney Web Co." unoptimized />
           </div>
           <h1 className="text-2xl font-bold tracking-tighter" style={{ color: "#316342" }}>Piney Web Co.</h1>
         </div>
@@ -79,9 +81,9 @@ export default function Activate() {
 
             <footer className="mt-12 pt-8 flex flex-col items-center text-center" style={{ borderTop: "1px solid rgba(193,201,191,0.2)" }}>
               <p className="text-sm mb-2" style={{ color: "#414942" }}>Don&apos;t have a confirmation number?</p>
-              <a className="font-medium border-b pb-0.5 text-sm transition-all" href="mailto:support@pineyweb.com" style={{ color: "#316342", borderColor: "rgba(49,99,66,0.3)" }}>
+              <button onClick={() => { if (window.$crisp) window.$crisp.push(["do", "chat:open"]); }} className="font-medium border-b pb-0.5 text-sm transition-all bg-transparent cursor-pointer" style={{ color: "#316342", borderColor: "rgba(49,99,66,0.3)" }}>
                 Contact our support team
-              </a>
+              </button>
             </footer>
           </div>
         </section>
@@ -97,6 +99,7 @@ export default function Activate() {
           </div>
         </div>
       </main>
+      <CrispChat />
     </div>
   );
 }
