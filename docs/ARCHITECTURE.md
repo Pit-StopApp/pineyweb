@@ -68,14 +68,17 @@ Templates are hosted in Resend, not rendered in code. Each `resend.emails.send()
 | Account Activated | `3c081e26-96b0-4f06-8349-6158e5e6c955` | firstName |
 | Build Started | `2b02c5c5-9ac7-4858-9957-b4ec350f2629` | firstName |
 | Site Live | `39e01065-57e9-46d9-8d05-86f1f6bd4d8b` | firstName, siteUrl |
-| Handoff | `d1fa68d9-098a-4101-b21b-a22c84df4003` | firstName, domain, vercelEmail, vercelPassword, namecheapEmail, namecheapPassword, googleEmail, googlePassword |
+| Handoff | `d1fa68d9-098a-4101-b21b-a22c84df4003` | firstName, siteUrl |
+| Client Payment Failed | `211e1b65-cbe5-40c9-8f99-061a9a4f2e85` | firstName, billingPortalUrl |
+| Admin Payment Failed | `e441704a-6b97-4462-9815-c7a4e9687bdf` | clientName, clientEmail, amount, failedDate, attemptNumber |
 
 ## API Routes
 
 ### POST /api/webhooks/stripe
-Handles two Stripe events:
+Handles three Stripe events:
 - **checkout.session.completed** — Creates order, generates confirmation number, sends OrderConfirmation email.
 - **invoice.paid** — Creates order from invoice line items, generates confirmation number, sends OrderConfirmation email. Sets `stripe_customer_id` on the matching `pineyweb_clients` row (by email) so the billing page can fetch Stripe data. If managed tier detected, creates a $99/mo subscription with 30-day trial (starts 30 days after invoice payment).
+- **invoice.payment_failed** — Sends payment failed email to client (with billing portal link) and alert to admin (with client details and attempt count). After 3 failed attempts, sets client status to `suspended`. Suspended clients are redirected to `/dashboard/suspended` with a payment update CTA.
 
 ### POST /api/activate
 Validates confirmation number, activates client account, sends AccountActivated email.

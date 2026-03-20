@@ -31,6 +31,7 @@ export default function DashboardHome() {
         .single();
 
       if (!data) { router.push("/?pending=1"); return; }
+      if (data.status === "suspended") { router.push("/dashboard/suspended"); return; }
       if (data.status === "pending" || data.status === "active") {
         router.push("/dashboard/onboarding");
         return;

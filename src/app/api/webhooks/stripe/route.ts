@@ -161,6 +161,56 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  if (event.type === "invoice.payment_failed") {
+    const failedInvoice = event.data.object as Stripe.Invoice;
+    const customerEmail = failedInvoice.customer_email || "";
+    const attemptCount = failedInvoice.attempt_count || 0;
+    const amount = `$${((failedInvoice.amount_due ?? 0) / 100).toFixed(2)}`;
+    const failedDate = new Date((failedInvoice.created ?? 0) * 1000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+
+    const { data: client } = await supabase
+      .from("pineyweb_clients")
+      .select("full_name, email, status")
+      .eq("email", customerEmail)
+      .single();
+
+    const firstName = client?.full_name?.split(" ")[0] ?? "there";
+    const clientName = client?.full_name ?? customerEmail;
+
+    const resend = getResend();
+
+    // Send alert to admin
+    try {
+      await resend.emails.send({
+        from: "Piney Web Co. <noreply@pineyweb.com>",
+        to: "hello@pineyweb.com",
+        subject: `Payment failed — ${clientName}`,
+        // @ts-expect-error Resend template API fields
+        template_id: "e441704a-6b97-4462-9815-c7a4e9687bdf",
+        variables: { clientName, clientEmail: customerEmail, amount, failedDate, attemptNumber: String(attemptCount) },
+      });
+    } catch (e) { console.error("[Webhook] Admin payment alert failed:", e); }
+
+    // Send notice to client
+    if (customerEmail) {
+      try {
+        await resend.emails.send({
+          from: "Piney Web Co. <noreply@pineyweb.com>",
+          to: customerEmail,
+          subject: "Action required — payment failed",
+          // @ts-expect-error Resend template API fields
+          template_id: "211e1b65-cbe5-40c9-8f99-061a9a4f2e85",
+          variables: { firstName, billingPortalUrl: "https://billing.stripe.com/p/login/bJe7sKgT82UMfO7aHHa3u00" },
+        });
+      } catch (e) { console.error("[Webhook] Client payment notice failed:", e); }
+    }
+
+    // Suspend after 3 failed attempts
+    if (attemptCount >= 3 && customerEmail) {
+      await supabase.from("pineyweb_clients").update({ status: "suspended" }).eq("email", customerEmail);
+    }
+  }
+
   return NextResponse.json({ received: true });
   } catch (err) {
     console.error("Webhook error:", err);
