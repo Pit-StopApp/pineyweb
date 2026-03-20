@@ -56,10 +56,10 @@ test.describe("Payment to activation flow", () => {
     });
 
     if (response.status() !== 200) {
-      const errorBody = await response.text();
-      console.error("Webhook response body:", errorBody);
+      const errorBody = await response.json();
+      console.error("Webhook error body:", JSON.stringify(errorBody));
+      throw new Error(`Webhook returned ${response.status()}: ${JSON.stringify(errorBody)}`);
     }
-    expect(response.status()).toBe(200);
     const body = await response.json();
     expect(body.received).toBe(true);
 

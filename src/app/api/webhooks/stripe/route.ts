@@ -45,6 +45,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `Webhook Error: ${msg}` }, { status: 400 });
   }
 
+  try {
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
 
@@ -160,4 +161,8 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ received: true });
+  } catch (err) {
+    console.error("Webhook error:", err);
+    return NextResponse.json({ error: String(err) }, { status: 500 });
+  }
 }
