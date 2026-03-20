@@ -180,6 +180,16 @@ export default function AdminClients() {
                               {sending === `${c.id}-site_live` ? "Sending..." : "Send Site Live"}
                             </button>
                           )}
+                          {status === "live" && c.tier === "One-Time" && (
+                            <button
+                              onClick={() => sendEmail(c.id, "handoff")}
+                              disabled={!!sending}
+                              className="px-4 py-1.5 rounded-md text-xs font-bold text-white transition-all disabled:opacity-50"
+                              style={{ backgroundColor: "#414942" }}
+                            >
+                              {sending === `${c.id}-handoff` ? "Sending..." : "Send Handoff"}
+                            </button>
+                          )}
                           <Link
                             href={`/dashboard?impersonate=${c.id}`}
                             className="px-4 py-1.5 rounded-md text-xs font-bold border transition-colors"

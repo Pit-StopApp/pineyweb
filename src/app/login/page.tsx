@@ -62,7 +62,10 @@ function LoginInner() {
             <input type="email" value={form.email} onChange={set("email")} placeholder="you@business.com" className={inputClass} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1 font-serif">Password</label>
+            <div className="flex justify-between items-center mb-1">
+              <label className="block text-sm font-medium text-gray-700 font-serif">Password</label>
+              <Link href="/forgot-password" className="text-xs font-medium font-serif" style={{ color: "#5A7D60" }}>Forgot password?</Link>
+            </div>
             <input type="password" value={form.password} onChange={set("password")} placeholder="Your password" className={inputClass} />
           </div>
 

@@ -14,6 +14,7 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
   { href: "/dashboard/edit", label: "Edit Site", icon: "edit_note" },
   { href: "/dashboard/billing", label: "Billing", icon: "receipt_long" },
+  { href: "/dashboard/settings", label: "Settings", icon: "settings" },
 ];
 
 export default function DashboardShell({ businessName, onLogout, children }: Props) {

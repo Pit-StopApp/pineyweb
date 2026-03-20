@@ -83,6 +83,8 @@ Admin-only. Sends BuildStarted or SiteLive email to a client. Verifies admin rol
 - `/login` — Auth
 - `/signup` — Registration
 - `/activate` — Account activation with confirmation number
+- `/forgot-password` — Email input, sends reset link via Resend template
+- `/reset-password` — New password form, validates recovery session
 
 ### Client Dashboard (protected)
 - `/dashboard` — Home with site preview, status grid
@@ -108,6 +110,11 @@ Admin-only. Sends BuildStarted or SiteLive email to a client. Verifies admin rol
   - Security note about Stripe
   - Footer: privacy, terms, contact links
   - API: POST /api/billing fetches Stripe payment method + invoices server-side
+- `/dashboard/settings` — Account settings:
+  - Account Info: edit full name (inline), email (triggers Supabase confirmation), password (current + new + confirm)
+  - Notifications: 3 toggles (project_updates, billing, announcements) saved to pineyweb_clients
+  - Security: last login timestamp, sign out all other devices
+  - Danger Zone: delete account (type DELETE to confirm) → deletes site_content, clients, orders, auth user
 
 ### Admin (admin role only)
 - `/admin/clients` — Full client management dashboard: table with name/business/tier/status/joined/actions, contextual action buttons per status (Send Build Started for pending, Send Site Live for in_progress, View Dashboard for all), pagination, search, stats grid (total clients, active builds, managed tier %, onboard client CTA)
