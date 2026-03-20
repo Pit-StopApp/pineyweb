@@ -30,19 +30,11 @@ export default function DashboardHome() {
         .eq("user_id", session.user.id)
         .single();
 
-      if (data) {
-        if (data.status === "pending") { router.push("/?pending=1"); return; }
-        setProfile(data);
-      } else {
-        setProfile({
-          full_name: session.user.user_metadata?.full_name || "Client",
-          business_name: session.user.user_metadata?.business_name || "",
-          email: session.user.email || "",
-          status: "active",
-          site_url: null,
-          tier: null,
-        });
+      if (!data || data.status !== "active") {
+        router.push("/?pending=1");
+        return;
       }
+      setProfile(data);
       setLoading(false);
     };
     checkAuth();
