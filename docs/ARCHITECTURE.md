@@ -76,6 +76,8 @@ Admin-only. Sends BuildStarted or SiteLive email to a client. Verifies admin rol
 
 ### Public
 - `/` — Landing page
+- `/privacy` — Privacy Policy (rendered from docs/privacy-policy.md)
+- `/terms` — Terms of Service (rendered from docs/terms-of-service.md)
 - `/login` — Auth
 - `/signup` — Registration
 - `/activate` — Account activation with confirmation number
