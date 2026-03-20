@@ -158,7 +158,7 @@ function Hero() {
       <div className="max-w-4xl mx-auto text-center">
         <div className="mb-8 flex justify-center">
           <Image
-            src="/PINEYWEBLOGO.png"
+            src="/transparentPINEYWEB.png"
             alt="Piney Web Co."
             width={280}
             height={280}

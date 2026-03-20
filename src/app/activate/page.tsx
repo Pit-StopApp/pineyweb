@@ -27,7 +27,7 @@ export default function Activate() {
         {/* Brand */}
         <div className="flex flex-col items-center mb-12">
           <div className="mb-4">
-            <Image src="/PINEYWEBLOGO.png" width={120} height={120} alt="Piney Web Co." unoptimized />
+            <Image src="/transparentPINEYWEB.png" width={120} height={120} alt="Piney Web Co." unoptimized />
           </div>
           <h1 className="text-2xl font-bold tracking-tighter" style={{ color: "#316342" }}>Piney Web Co.</h1>
         </div>
