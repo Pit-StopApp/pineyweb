@@ -70,7 +70,7 @@ export default function DashboardShell({ businessName, onLogout, children }: Pro
         </aside>
 
         {/* Main */}
-        <main className="flex-1 md:ml-64 mt-20 p-6 md:p-10">
+        <main className="flex-1 md:ml-64 mt-20 p-6 md:p-10 pb-20">
           {children}
         </main>
       </div>

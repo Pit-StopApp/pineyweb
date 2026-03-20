@@ -87,7 +87,7 @@ export default function DashboardHome() {
             </a>
           )}
         </div>
-        <div className="aspect-video w-full relative overflow-hidden" style={{ backgroundColor: "#fef9f1" }}>
+        <div className="w-full relative overflow-hidden" style={{ backgroundColor: "#fef9f1", height: "600px" }}>
           {profile?.site_url ? (
             <iframe src={profile.site_url} className="w-full h-full border-0" title="Website Preview" />
           ) : (
