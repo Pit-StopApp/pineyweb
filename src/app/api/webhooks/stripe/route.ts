@@ -90,5 +90,66 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  if (event.type === "invoice.paid") {
+    const invoice = event.data.object as Stripe.Invoice;
+
+    const fullInvoice = await stripe.invoices.retrieve(invoice.id, { expand: ["lines.data.price"] });
+    const lineItems = fullInvoice.lines?.data || [];
+
+    const email = fullInvoice.customer_email || "";
+    const firstName = fullInvoice.customer_name?.split(" ")[0] || "there";
+
+    const productNames: string[] = [];
+    let isManaged = false;
+    for (const item of lineItems) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const priceId = ((item as any).price as Stripe.Price)?.id;
+      const mapped = priceId ? PRICE_MAP[priceId] : null;
+      if (mapped === "MANAGED_SETUP") isManaged = true;
+      if (mapped && mapped !== "ONE_TIME_BUILD" && mapped !== "MANAGED_SETUP" && mapped !== "MANAGED_MONTHLY") {
+        productNames.push(mapped);
+      }
+    }
+
+    const tier = isManaged ? "managed" : "one_time";
+    const confirmationNumber = await generateConfirmationNumber();
+
+    await supabase.from("pineyweb_orders").insert({
+      confirmation_number: confirmationNumber,
+      email,
+      tier,
+      addons: productNames,
+      status: "pending",
+    });
+
+    try {
+      const resend = getResend();
+      await resend.emails.send({
+        from: "Piney Web Co. <noreply@pineyweb.com>",
+        to: email,
+        subject: `Order Confirmed — ${confirmationNumber}`,
+        // @ts-expect-error Resend template API fields
+        template_id: "3aa394e5-f6d0-42e4-88ff-6596b6ee787b",
+        variables: { firstName, confirmationNumber },
+      });
+    } catch (emailErr) {
+      console.error("[Stripe Webhook] invoice.paid email failed:", emailErr);
+    }
+
+    if (isManaged && fullInvoice.customer) {
+      try {
+        const paidAt = fullInvoice.status_transitions?.paid_at;
+        const trialEnd = paidAt ? paidAt + 30 * 24 * 60 * 60 : Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
+        await stripe.subscriptions.create({
+          customer: fullInvoice.customer as string,
+          items: [{ price: "price_1TCslFCl3mxbQo5h1muouhI8" }],
+          trial_end: trialEnd,
+        });
+      } catch (subErr) {
+        console.error("[Stripe Webhook] Subscription creation failed:", subErr);
+      }
+    }
+  }
+
   return NextResponse.json({ received: true });
 }

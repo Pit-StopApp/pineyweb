@@ -64,7 +64,9 @@ Templates are hosted in Resend, not rendered in code. Each `resend.emails.send()
 ## API Routes
 
 ### POST /api/webhooks/stripe
-Stripe webhook for `checkout.session.completed`. Creates order, generates confirmation number, sends OrderConfirmation email.
+Handles two Stripe events:
+- **checkout.session.completed** — Creates order, generates confirmation number, sends OrderConfirmation email.
+- **invoice.paid** — Creates order from invoice line items, generates confirmation number, sends OrderConfirmation email. If managed tier detected, creates a $99/mo subscription with 30-day trial (starts 30 days after invoice payment).
 
 ### POST /api/activate
 Validates confirmation number, activates client account, sends AccountActivated email.
