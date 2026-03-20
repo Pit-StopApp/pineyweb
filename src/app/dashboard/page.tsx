@@ -54,13 +54,16 @@ export default function DashboardHome() {
   }
 
   const firstName = profile?.full_name?.split(" ")[0] || profile?.business_name || "there";
+  const ctHour = new Date().toLocaleString("en-US", { timeZone: "America/Chicago", hour: "numeric", hour12: false });
+  const hour = parseInt(ctHour, 10);
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   return (
     <DashboardShell businessName={profile?.business_name} onLogout={handleLogout}>
       {/* Header */}
       <div className="mb-12">
         <span className="text-xs tracking-[0.15em] uppercase font-bold mb-2 block" style={{ color: "#316342" }}>DASHBOARD OVERVIEW</span>
-        <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-4" style={{ color: "#1d1c17" }}>Good morning, {firstName}.</h2>
+        <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-4" style={{ color: "#1d1c17" }}>{greeting}, {firstName}.</h2>
         <p className="max-w-2xl text-lg leading-relaxed italic" style={{ color: "#414942" }}>
           Your digital presence is performing optimally. Review your live site and account status below.
         </p>
