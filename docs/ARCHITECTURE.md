@@ -48,12 +48,18 @@
 | content_value | TEXT | The content value |
 | updated_at | TIMESTAMP | Last modified |
 
-## Email Templates (src/emails/)
-- **OrderConfirmation** — Sent after Stripe checkout. Shows confirmation number.
-- **AccountActivated** — Sent when client activates via /activate.
-- **BuildStarted** — Sent by admin when build begins.
-- **SiteLive** — Sent by admin when site goes live.
-- **Handoff** — Credentials handoff with account details.
+## Email Templates (Resend hosted templates)
+
+Templates are hosted in Resend, not rendered in code. Each `resend.emails.send()` call uses `template_id` + `variables`.
+
+| Template | Resend ID | Variables |
+|----------|-----------|-----------|
+| Email Verification | `fd770b43-793f-4158-a0d2-12482c6aedcb` | firstName, confirmationUrl |
+| Order Confirmation | `3aa394e5-f6d0-42e4-88ff-6596b6ee787b` | firstName, confirmationNumber |
+| Account Activated | `3c081e26-96b0-4f06-8349-6158e5e6c955` | firstName |
+| Build Started | `2b02c5c5-9ac7-4858-9957-b4ec350f2629` | firstName |
+| Site Live | `39e01065-57e9-46d9-8d05-86f1f6bd4d8b` | firstName, siteUrl |
+| Handoff | `d1fa68d9-098a-4101-b21b-a22c84df4003` | firstName, domain, vercelEmail, vercelPassword, namecheapEmail, namecheapPassword, googleEmail, googlePassword |
 
 ## API Routes
 

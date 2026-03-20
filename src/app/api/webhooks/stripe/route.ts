@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
-import { render } from "@react-email/components";
-import OrderConfirmation from "@/emails/OrderConfirmation";
 
 function getStripe() { return new Stripe(process.env.STRIPE_SECRET_KEY!); }
 function getResend() { return new Resend(process.env.RESEND_API_KEY); }
@@ -50,11 +48,9 @@ export async function POST(request: NextRequest) {
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
 
-    // Retrieve session with line items
     const fullSession = await stripe.checkout.sessions.retrieve(session.id, { expand: ["line_items.data.price"] });
     const lineItems = fullSession.line_items?.data || [];
 
-    // Map products
     const productNames: string[] = [];
     let isManaged = false;
     for (const item of lineItems) {
@@ -71,7 +67,6 @@ export async function POST(request: NextRequest) {
     const firstName = session.customer_details?.name?.split(" ")[0] || "there";
     const confirmationNumber = await generateConfirmationNumber();
 
-    // Insert order
     await supabase.from("pineyweb_orders").insert({
       confirmation_number: confirmationNumber,
       email,
@@ -80,15 +75,15 @@ export async function POST(request: NextRequest) {
       status: "pending",
     });
 
-    // Send confirmation email
     try {
       const resend = getResend();
-      const html = await render(OrderConfirmation({ firstName, confirmationNumber }));
       await resend.emails.send({
         from: "Piney Web Co. <noreply@pineyweb.com>",
         to: email,
         subject: `Order Confirmed — ${confirmationNumber}`,
-        html,
+        // @ts-expect-error Resend template API fields
+        template_id: "3aa394e5-f6d0-42e4-88ff-6596b6ee787b",
+        variables: { firstName, confirmationNumber },
       });
     } catch (emailErr) {
       console.error("[Stripe Webhook] Email send failed:", emailErr);
