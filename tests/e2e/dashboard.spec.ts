@@ -17,9 +17,8 @@ test.describe("Client dashboard", () => {
     await page.waitForTimeout(3000);
 
     await page.goto("/dashboard");
-    await page.waitForURL("**/?pending=1**", { timeout: 10000 });
-    // Pending users redirect to home with banner
-    expect(page.url()).toContain("pending=1");
+    await page.waitForURL("**/dashboard/onboarding**", { timeout: 10000 });
+    expect(page.url()).toContain("/dashboard/onboarding");
   });
 
   test("onboarding Step 1 saves to pineyweb_site_content", async ({ page }) => {
