@@ -122,6 +122,14 @@ export async function POST(request: NextRequest) {
       status: "pending",
     });
 
+    // Link stripe_customer_id to client on first payment
+    if (fullInvoice.customer && email) {
+      await supabase
+        .from("pineyweb_clients")
+        .update({ stripe_customer_id: fullInvoice.customer as string })
+        .eq("email", email);
+    }
+
     try {
       const resend = getResend();
       await resend.emails.send({
