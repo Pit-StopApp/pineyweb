@@ -406,7 +406,8 @@ function Portfolio() {
     {
       name: "PitStop",
       desc: "On-demand auto parts delivery marketplace connecting customers, vendors, and drivers across East Texas.",
-      image: "/pitstop.png",
+      image: "",
+      video: "https://www.youtube.com/embed/zbmlKLecixk?si=PBdqf-m_7CMaP4L7",
       url: "https://orderpitstop.com",
       tags: ["Marketplace", "Next.js", "East Texas"],
       bg: "#0a0f1e",
@@ -439,14 +440,29 @@ function Portfolio() {
               className="group rounded-xl overflow-hidden hover:shadow-lg transition-all"
               style={{ backgroundColor: p.bg }}
             >
-              <div className="h-[200px] relative overflow-hidden">
-                <Image
-                  src={p.image}
-                  alt={p.name}
-                  fill
-                  unoptimized
-                  className="object-contain group-hover:scale-105 transition-transform duration-500"
-                />
+              <div className="relative overflow-hidden">
+                {p.video ? (
+                  <iframe
+                    width="100%"
+                    style={{ aspectRatio: "16/9", borderRadius: "8px 8px 0 0" }}
+                    src={p.video}
+                    title={`${p.name} Demo`}
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    allowFullScreen
+                  />
+                ) : (
+                  <div className="h-[200px] relative">
+                    <Image
+                      src={p.image}
+                      alt={p.name}
+                      fill
+                      unoptimized
+                      className="object-contain group-hover:scale-105 transition-transform duration-500"
+                    />
+                  </div>
+                )}
               </div>
               <div className="p-6">
                 <div className="flex items-center gap-2 mb-2">
