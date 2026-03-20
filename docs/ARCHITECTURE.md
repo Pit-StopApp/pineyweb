@@ -90,7 +90,7 @@ Admin-only. Sends BuildStarted or SiteLive email to a client. Verifies admin rol
 - `/dashboard/billing` — Plan, payment, invoices
 
 ### Admin (admin role only)
-- `/admin/clients` — Client management table with email actions
+- `/admin/clients` — Full client management dashboard: table with name/business/tier/status/joined/actions, contextual action buttons per status (Send Build Started for pending, Send Site Live for in_progress, View Dashboard for all), pagination, search, stats grid (total clients, active builds, managed tier %, onboard client CTA)
 
 ## Order Flow
 1. Client purchases via Stripe checkout

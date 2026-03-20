@@ -17,31 +17,27 @@ interface Client {
   site_url: string | null;
 }
 
-const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
-  pending: { bg: "rgba(107,114,128,0.15)", color: "#6b7280" },
-  active: { bg: "rgba(74,124,89,0.15)", color: "#4A7C59" },
-  in_progress: { bg: "rgba(245,158,11,0.15)", color: "#d97706" },
-  live: { bg: "rgba(22,101,52,0.2)", color: "#166534" },
-};
+const PAGE_SIZE = 10;
 
 export default function AdminClients() {
   const router = useRouter();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [adminUserId, setAdminUserId] = useState("");
+  const [adminName, setAdminName] = useState("");
   const [search, setSearch] = useState("");
   const [sending, setSending] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
     const init = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push("/login"); return; }
-
-      const { data: me } = await supabase.from("pineyweb_clients").select("role").eq("user_id", session.user.id).single();
+      const { data: me } = await supabase.from("pineyweb_clients").select("role, full_name").eq("user_id", session.user.id).single();
       if (!me || me.role !== "admin") { router.push("/dashboard"); return; }
       setAdminUserId(session.user.id);
-
+      setAdminName(me.full_name || "Admin");
       const { data } = await supabase.from("pineyweb_clients").select("*").order("created_at", { ascending: false });
       setClients((data || []) as Client[]);
       setLoading(false);
@@ -60,8 +56,7 @@ export default function AdminClients() {
       });
       const data = await res.json();
       if (data.success) {
-        setMsg(`Email sent!`);
-        // Refresh clients
+        setMsg("Email sent!");
         const { data: updated } = await supabase.from("pineyweb_clients").select("*").order("created_at", { ascending: false });
         setClients((updated || []) as Client[]);
       } else {
@@ -72,97 +67,190 @@ export default function AdminClients() {
     setTimeout(() => setMsg(""), 3000);
   };
 
+  const handleLogout = async () => { await supabase.auth.signOut(); router.push("/login"); };
+
   const filtered = clients.filter((c) => {
     const q = search.toLowerCase();
     return !q || (c.full_name || "").toLowerCase().includes(q) || (c.business_name || "").toLowerCase().includes(q);
   });
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#fef9f1" }}><p>Loading...</p></div>;
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  // Stats
+  const totalClients = clients.length;
+  const activeBuilds = clients.filter(c => c.status === "in_progress").length;
+  const managedCount = clients.filter(c => c.tier === "Managed").length;
+  const managedPct = totalClients > 0 ? Math.round((managedCount / totalClients) * 100) : 0;
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#fef9f1", fontFamily: "'Lora', serif" }}><p style={{ color: "#414942" }}>Loading...</p></div>;
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#fef9f1", fontFamily: "'Lora', serif" }}>
-      <header className="border-b px-8 py-4 flex items-center justify-between" style={{ backgroundColor: "#f8f3eb", borderColor: "#e7e2da" }}>
-        <Link href="/dashboard" className="text-xl font-bold" style={{ color: "#316342" }}>Piney Web Co.</Link>
-        <span className="text-xs uppercase tracking-widest font-bold" style={{ color: "#805533" }}>Admin Panel</span>
+      {/* Top Nav */}
+      <header className="fixed top-0 left-0 w-full flex justify-between items-center px-8 py-4 z-50 backdrop-blur-md" style={{ backgroundColor: "rgba(254,249,241,0.8)", boxShadow: "0 12px 40px rgba(48,20,0,0.06)" }}>
+        <Link href="/dashboard" className="text-2xl font-bold tracking-tighter" style={{ color: "#316342" }}>Piney Web Co.</Link>
+        <nav className="hidden md:flex items-center gap-8">
+          <Link href="/dashboard" className="text-sm tracking-wide uppercase" style={{ color: "#414942", opacity: 0.7 }}>Dashboard</Link>
+          <Link href="/admin/clients" className="text-sm tracking-wide uppercase font-bold" style={{ color: "#316342" }}>Clients</Link>
+        </nav>
+        <div className="flex items-center gap-4">
+          <span className="text-sm" style={{ color: "#414942" }}>{adminName}</span>
+          <button onClick={handleLogout} className="text-sm font-medium tracking-tight transition-colors" style={{ color: "#414942" }}>Log Out</button>
+        </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-6 py-10">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold" style={{ color: "#1d1c17" }}>Client Management</h1>
-          {msg && <span className="text-sm font-medium" style={{ color: "#4A7C59" }}>{msg}</span>}
+      <main className="pt-24 pb-20 px-6 md:px-12 max-w-7xl mx-auto">
+        {/* Page Header */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+          <div>
+            <span className="inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-4" style={{ backgroundColor: "#fdc39a", color: "#794e2e" }}>Admin</span>
+            <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-2" style={{ color: "#1d1c17" }}>Client Management</h1>
+            <p className="text-lg italic max-w-xl" style={{ color: "#414942" }}>Oversee the lifecycle of Piney Web Co. partners from initial build to live maintenance.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {msg && <span className="text-sm font-medium" style={{ color: "#4A7C59" }}>{msg}</span>}
+            <div className="relative">
+              <input
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+                placeholder="Search clients..."
+                className="pl-10 pr-4 py-2.5 rounded-lg border text-sm w-64"
+                style={{ borderColor: "#c1c9bf", backgroundColor: "#ffffff" }}
+              />
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px]" style={{ color: "#c1c9bf" }}>search</span>
+            </div>
+          </div>
         </div>
 
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name or business..."
-          className="w-full max-w-md px-4 py-2.5 rounded-lg border mb-8 text-sm"
-          style={{ borderColor: "#c1c9bf", backgroundColor: "#ffffff" }}
-        />
+        {/* Table */}
+        <div className="rounded-xl border overflow-hidden mb-10" style={{ backgroundColor: "#f8f3eb", borderColor: "rgba(193,201,191,0.2)" }}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-[0.15em] font-bold border-b" style={{ color: "#414942", borderColor: "rgba(193,201,191,0.2)" }}>
+                  <th className="py-4 pl-6">Client Name</th>
+                  <th className="py-4">Business Name</th>
+                  <th className="py-4">Tier</th>
+                  <th className="py-4">Status</th>
+                  <th className="py-4">Date Joined</th>
+                  <th className="py-4 text-right pr-6">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginated.map((c) => {
+                  const status = c.status || "pending";
+                  return (
+                    <tr key={c.id} className="border-b transition-colors hover:bg-[#f2ede5]" style={{ borderColor: "rgba(193,201,191,0.1)" }}>
+                      <td className="py-5 pl-6">
+                        <div className="font-semibold" style={{ color: "#1d1c17" }}>{c.full_name || "—"}</div>
+                        <div className="text-xs" style={{ color: "#717971" }}>{c.email || ""}</div>
+                      </td>
+                      <td className="py-5" style={{ color: "#414942" }}>{c.business_name || "—"}</td>
+                      <td className="py-5">
+                        <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider" style={{ backgroundColor: "rgba(113,121,113,0.15)", color: "#717971" }}>
+                          {c.tier || "—"}
+                        </span>
+                      </td>
+                      <td className="py-5">
+                        <StatusBadge status={status} />
+                      </td>
+                      <td className="py-5 text-sm" style={{ color: "#414942" }}>
+                        {c.created_at ? new Date(c.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                      </td>
+                      <td className="py-5 text-right pr-6">
+                        <div className="flex gap-2 justify-end flex-wrap">
+                          {status === "pending" && (
+                            <button
+                              onClick={() => sendEmail(c.id, "build_started")}
+                              disabled={!!sending}
+                              className="px-4 py-1.5 rounded-md text-xs font-bold text-white transition-all disabled:opacity-50"
+                              style={{ backgroundColor: "#4A7C59" }}
+                            >
+                              {sending === `${c.id}-build_started` ? "Sending..." : "Send Build Started"}
+                            </button>
+                          )}
+                          {status === "in_progress" && (
+                            <button
+                              onClick={() => sendEmail(c.id, "site_live")}
+                              disabled={!!sending}
+                              className="px-4 py-1.5 rounded-md text-xs font-bold text-white transition-all disabled:opacity-50"
+                              style={{ backgroundColor: "#805533" }}
+                            >
+                              {sending === `${c.id}-site_live` ? "Sending..." : "Send Site Live"}
+                            </button>
+                          )}
+                          <Link
+                            href={`/dashboard?impersonate=${c.id}`}
+                            className="px-4 py-1.5 rounded-md text-xs font-bold border transition-colors"
+                            style={{ color: "#316342", borderColor: "#316342" }}
+                          >
+                            View Dashboard
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {paginated.length === 0 && (
+                  <tr><td colSpan={6} className="py-12 text-center text-sm" style={{ color: "#414942" }}>No clients found</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left" style={{ borderCollapse: "separate", borderSpacing: "0 8px" }}>
-            <thead>
-              <tr className="text-xs uppercase tracking-[0.15em] font-bold" style={{ color: "#414942" }}>
-                <th className="pb-2 pl-4">Client Name</th>
-                <th className="pb-2">Business</th>
-                <th className="pb-2">Tier</th>
-                <th className="pb-2">Status</th>
-                <th className="pb-2">Joined</th>
-                <th className="pb-2 text-right pr-4">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((c) => {
-                const st = STATUS_STYLES[c.status || "pending"] || STATUS_STYLES.pending;
-                return (
-                  <tr key={c.id} style={{ backgroundColor: "#ffffff" }}>
-                    <td className="py-4 pl-4 rounded-l-lg font-medium" style={{ color: "#1d1c17" }}>{c.full_name || "—"}</td>
-                    <td className="py-4" style={{ color: "#414942" }}>{c.business_name || "—"}</td>
-                    <td className="py-4 text-sm">{c.tier || "—"}</td>
-                    <td className="py-4">
-                      <span className="px-3 py-1 rounded-full text-xs font-bold uppercase" style={{ backgroundColor: st.bg, color: st.color }}>{c.status || "pending"}</span>
-                    </td>
-                    <td className="py-4 text-sm" style={{ color: "#414942" }}>
-                      {c.created_at ? new Date(c.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
-                    </td>
-                    <td className="py-4 text-right pr-4 rounded-r-lg">
-                      <div className="flex gap-2 justify-end">
-                        <button
-                          onClick={() => sendEmail(c.id, "build_started")}
-                          disabled={sending === `${c.id}-build_started`}
-                          className="px-3 py-1.5 rounded text-xs font-bold transition-colors disabled:opacity-50"
-                          style={{ backgroundColor: "rgba(245,158,11,0.15)", color: "#d97706" }}
-                        >
-                          {sending === `${c.id}-build_started` ? "..." : "Build Started"}
-                        </button>
-                        <button
-                          onClick={() => sendEmail(c.id, "site_live")}
-                          disabled={sending === `${c.id}-site_live`}
-                          className="px-3 py-1.5 rounded text-xs font-bold transition-colors disabled:opacity-50"
-                          style={{ backgroundColor: "rgba(22,101,52,0.15)", color: "#166534" }}
-                        >
-                          {sending === `${c.id}-site_live` ? "..." : "Site Live"}
-                        </button>
-                        <Link
-                          href={`/dashboard`}
-                          className="px-3 py-1.5 rounded text-xs font-bold"
-                          style={{ backgroundColor: "rgba(74,124,89,0.15)", color: "#4A7C59" }}
-                        >
-                          Dashboard
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filtered.length === 0 && (
-                <tr><td colSpan={6} className="py-8 text-center text-sm" style={{ color: "#414942" }}>No clients found</td></tr>
-              )}
-            </tbody>
-          </table>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t" style={{ borderColor: "rgba(193,201,191,0.2)" }}>
+              <span className="text-xs" style={{ color: "#717971" }}>
+                Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}
+              </span>
+              <div className="flex gap-2">
+                <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="px-3 py-1 rounded text-xs font-bold disabled:opacity-30" style={{ color: "#316342" }}>Previous</button>
+                <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="px-3 py-1 rounded text-xs font-bold disabled:opacity-30" style={{ color: "#316342" }}>Next</button>
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <StatCard label="Total Clients" value={String(totalClients)} icon="group" />
+          <StatCard label="Active Builds" value={String(activeBuilds)} icon="construction" />
+          <StatCard label="Managed Tiers" value={`${managedPct}%`} icon="auto_awesome" />
+          <div className="rounded-xl p-6 text-white" style={{ backgroundColor: "#4A7C59" }}>
+            <span className="material-symbols-outlined text-2xl mb-3 block" style={{ opacity: 0.8 }}>person_add</span>
+            <h3 className="text-sm uppercase tracking-widest opacity-70 mb-1">Quick Action</h3>
+            <p className="text-xl font-bold mb-4">Onboard Client</p>
+            <button className="px-5 py-2 rounded-md text-sm font-bold transition-colors" style={{ backgroundColor: "rgba(255,255,255,0.2)", color: "#ffffff" }}>
+              + New Client
+            </button>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  if (status === "pending") return <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider" style={{ backgroundColor: "rgba(193,201,191,0.4)", color: "#717971" }}>Pending</span>;
+  if (status === "active") return <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider text-white" style={{ backgroundColor: "#4a7c59" }}>Active</span>;
+  if (status === "in_progress") return <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider" style={{ backgroundColor: "#fef3c7", color: "#92400e" }}>In Progress</span>;
+  if (status === "live") return (
+    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider text-white" style={{ backgroundColor: "#316342" }}>
+      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+      Live
+    </span>
+  );
+  return <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase" style={{ backgroundColor: "rgba(193,201,191,0.4)", color: "#717971" }}>{status}</span>;
+}
+
+function StatCard({ label, value, icon }: { label: string; value: string; icon: string }) {
+  return (
+    <div className="rounded-xl p-6 border" style={{ backgroundColor: "#f8f3eb", borderColor: "rgba(193,201,191,0.2)" }}>
+      <span className="material-symbols-outlined text-2xl mb-3 block" style={{ color: "#316342" }}>{icon}</span>
+      <h3 className="text-[11px] uppercase tracking-widest mb-1" style={{ color: "#414942" }}>{label}</h3>
+      <p className="text-3xl font-bold" style={{ color: "#1d1c17" }}>{value}</p>
     </div>
   );
 }
