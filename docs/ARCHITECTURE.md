@@ -86,7 +86,14 @@ Admin-only. Sends BuildStarted or SiteLive email to a client. Verifies admin rol
 
 ### Client Dashboard (protected)
 - `/dashboard` — Home with site preview, status grid
-- `/dashboard/edit` — Edit site content with 3 tabs:
+- `/dashboard/onboarding` — 3-step intake form for new clients (pending/active status):
+  - Step 1 (Your Business): business_name, tagline, phone, email, address, hours, services_offered, service_area, business_description
+  - Step 2 (Your Style): logo toggle + upload to Supabase Storage, brand colors toggle + color pickers (primary_color, accent_color), admired_websites, styles_to_avoid
+  - Step 3 (Your Accounts): domain toggle (→ Namecheap), logins toggle (→ Supabase), payments toggle (→ Stripe), extra_notes
+  - All data saved to pineyweb_site_content with content_type='onboarding'
+  - On completion: sets pineyweb_clients.status='in_progress', redirects to /dashboard
+  - /dashboard/edit redirects to /dashboard/onboarding if status is pending or active
+- `/dashboard/edit` — Edit site content with 3 tabs (available when status is in_progress or live):
   - **Text**: business_name, tagline, about_text, phone, email, address, hours
   - **Images**: logo_url, hero_image_url, gallery_image_1-3_url (uploaded to Supabase Storage `pineyweb-assets/{client_id}/`)
   - **Colors**: primary_color, secondary_color, background_color (color picker)

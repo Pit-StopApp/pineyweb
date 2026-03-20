@@ -77,7 +77,9 @@ export default function EditSite() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push("/login"); return; }
       const { data } = await supabase.from("pineyweb_clients").select("id, business_name, status, deploy_hook_url").eq("user_id", session.user.id).single();
-      if (!data || data.status !== "active") { router.push("/?pending=1"); return; }
+      if (!data) { router.push("/?pending=1"); return; }
+      if (data.status === "pending" || data.status === "active") { router.push("/dashboard/onboarding"); return; }
+      if (data.status !== "live" && data.status !== "in_progress") { router.push("/?pending=1"); return; }
       setBusinessName(data.business_name || "");
       setClientId(data.id);
       setDeployHookUrl(data.deploy_hook_url || null);
