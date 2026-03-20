@@ -30,8 +30,9 @@ export default function DashboardHome() {
         .eq("user_id", session.user.id)
         .single();
 
-      if (!data || data.status !== "active") {
-        router.push("/?pending=1");
+      if (!data) { router.push("/?pending=1"); return; }
+      if (data.status === "pending" || data.status === "active") {
+        router.push("/dashboard/onboarding");
         return;
       }
       setProfile(data);
