@@ -93,7 +93,14 @@ Admin-only. Sends BuildStarted or SiteLive email to a client. Verifies admin rol
   - Save Draft: upserts to pineyweb_site_content
   - Publish: saves + POSTs to client's deploy_hook_url from pineyweb_clients
   - Info banner directs users to Crisp chat for larger changes
-- `/dashboard/billing` — Plan, payment, invoices
+- `/dashboard/billing` — Billing & Payments page (Stitch design):
+  - Current Plan card: tier from DB, $99/mo managed or $799 one-time, next billing date
+  - Payment Method card: fetched from Stripe via stripe_customer_id, shows brand/last4/expiry
+  - "Manage Payment Method" links to Stripe customer portal
+  - Invoice History: fetched from stripe.invoices.list, shows date/description/amount/status/PDF download
+  - Security note about Stripe
+  - Footer: privacy, terms, contact links
+  - API: POST /api/billing fetches Stripe payment method + invoices server-side
 
 ### Admin (admin role only)
 - `/admin/clients` — Full client management dashboard: table with name/business/tier/status/joined/actions, contextual action buttons per status (Send Build Started for pending, Send Site Live for in_progress, View Dashboard for all), pagination, search, stats grid (total clients, active builds, managed tier %, onboard client CTA)
