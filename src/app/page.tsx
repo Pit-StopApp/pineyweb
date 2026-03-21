@@ -287,7 +287,7 @@ function Pricing() {
     },
     {
       name: "Managed",
-      price: "$299",
+      price: "$399",
       priceSetup: "$99/mo",
       period: "setup",
       desc: "We build, host, and manage your site month-to-month. Cancel anytime.",
