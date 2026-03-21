@@ -114,7 +114,7 @@ export default function ScannerPage() {
   const bulkSendTier1 = async () => {
     setShowBulkConfirm(false);
     setBulkSending(true);
-    const tier1Items = results.filter(r => r.priority_tier === 1 && !emailed.has(r.place_id));
+    const tier1Items = results.filter(r => r.priority_tier === 1 && r.email && !emailed.has(r.place_id));
     const batches: Result[][] = [];
     for (let i = 0; i < tier1Items.length; i += 50) batches.push(tier1Items.slice(i, i + 50));
 
@@ -225,9 +225,11 @@ export default function ScannerPage() {
               <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "#794e2e" }}>★ TIER 1 — HIGH Priority</span>
               <div className="flex items-center gap-3">
                 {bulkProgress && <span className="text-xs italic" style={{ color: "#794e2e" }}>{bulkProgress}</span>}
-                <button onClick={() => setShowBulkConfirm(true)} disabled={bulkSending} className="px-4 py-1.5 rounded-md text-xs font-bold text-white disabled:opacity-50" style={{ backgroundColor: "#316342" }}>
-                  {bulkSending ? "Sending..." : `Send to ${tier1.filter(r => !emailed.has(r.place_id)).length} Tier 1`}
-                </button>
+                {(() => { const count = tier1.filter(r => r.email && !emailed.has(r.place_id)).length; return (
+                  <button onClick={() => setShowBulkConfirm(true)} disabled={bulkSending || count === 0} className="px-4 py-1.5 rounded-md text-xs font-bold text-white disabled:opacity-50" style={{ backgroundColor: "#316342" }}>
+                    {bulkSending ? "Sending..." : count === 0 ? "No Emails Found in Tier 1" : `Send to ${count} Tier 1`}
+                  </button>
+                ); })()}
               </div>
             </div>
             <div className="rounded-b-xl border border-t-0 overflow-hidden" style={{ backgroundColor: "#f8f3eb", borderColor: "rgba(193,201,191,0.2)" }}>
@@ -241,8 +243,8 @@ export default function ScannerPage() {
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
             <div className="w-full max-w-md p-8 rounded-xl" style={{ backgroundColor: "#F5F0E8" }}>
               <h3 className="text-xl font-bold mb-4" style={{ color: "#1d1c17" }}>Confirm Bulk Send</h3>
-              <p className="text-sm mb-2" style={{ color: "#414942" }}>You&apos;re about to send <strong>{tier1.filter(r => !emailed.has(r.place_id)).length}</strong> cold emails. This cannot be undone.</p>
-              {tier1.filter(r => !emailed.has(r.place_id)).length > 50 && <p className="text-xs mb-4 italic" style={{ color: "#805533" }}>Sending in {Math.ceil(tier1.filter(r => !emailed.has(r.place_id)).length / 50)} batches due to rate limits</p>}
+              <p className="text-sm mb-2" style={{ color: "#414942" }}>You&apos;re about to send <strong>{tier1.filter(r => r.email && !emailed.has(r.place_id)).length}</strong> cold emails. This cannot be undone.</p>
+              {tier1.filter(r => r.email && !emailed.has(r.place_id)).length > 50 && <p className="text-xs mb-4 italic" style={{ color: "#805533" }}>Sending in {Math.ceil(tier1.filter(r => r.email && !emailed.has(r.place_id)).length / 50)} batches due to rate limits</p>}
               <div className="flex gap-3 mt-6">
                 <button onClick={bulkSendTier1} className="flex-1 py-3 rounded-md text-sm font-bold text-white" style={{ backgroundColor: "#316342" }}>Proceed</button>
                 <button onClick={() => setShowBulkConfirm(false)} className="px-6 py-3 rounded-md text-sm font-bold border" style={{ color: "#414942", borderColor: "#c1c9bf" }}>Cancel</button>
