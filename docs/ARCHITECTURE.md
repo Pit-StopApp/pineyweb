@@ -87,12 +87,18 @@ Resend webhook handler with svix signature verification (`RESEND_WEBHOOK_SECRET_
 Prospects CRM shows ✅ for delivered, ⚠️ for spam complaints next to status badge.
 
 ### GET /api/cron/auto-scan
-Daily cron (8am UTC via Vercel Cron). Automated scanning pipeline:
+Daily cron (8am UTC via Vercel Cron). Scans exactly 1 city per invocation — no internal loop, no timeout risk:
 1. Checks daily send cap from `pineyweb_daily_send_tracker` — stops if reached or paused (cap=0)
-2. Gets next 3 unscanned cities from `pineyweb_scanner_queue` (closest to Longview first)
-3. Runs keyword + type searches for each city via `/api/admin/scanner`
+2. Gets next pending city (closest to Longview first), marks as "scanning"
+3. Runs keyword + type searches via `/api/admin/scanner`
 4. Sends cold outreach to new prospects with emails (up to remaining daily cap)
-5. Updates queue status, daily tracker, sends summary email to admin
+5. Marks city complete, updates daily tracker, sends summary email
+6. Returns `current_city`, `emails_sent_today`, `cap_reached` in response
+
+### GET /api/admin/cron-trigger
+Admin-authenticated proxy to auto-scan. Verifies user session + admin role, then calls `/api/cron/auto-scan` with the server-side `CRON_SECRET`. Keeps the secret off the browser. Used by the "Run Until Cap" button on /admin/queue.
+
+The /admin/queue page loops from the browser (same pattern as scanner batching): calls `/api/admin/cron-trigger` repeatedly, refreshes queue table after each city, shows live progress with current city name, and stops when cap is reached, queue is exhausted, or user clicks "Stop".
 
 ### pineyweb_scanner_queue
 Tracks 200+ Texas cities sorted by distance from Longview. Columns: city, lat/lng, distance, population, status (pending/scanning/complete/error), prospects_found, emails_found, emails_sent, last_scanned_at.

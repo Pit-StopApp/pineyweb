@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
@@ -15,6 +15,18 @@ export default function QueuePage() {
   const [emailsToday, setEmailsToday] = useState(0);
   const [newCap, setNewCap] = useState("");
   const [seeding, setSeeding] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
+  const [runProgress, setRunProgress] = useState("");
+  const stopRef = useRef(false);
+
+  const fetchQueueStats = async () => {
+    const res = await fetch("/api/admin/queue-stats");
+    const stats = await res.json();
+    setQueue((stats.queue || []) as QueueItem[]);
+    setEmailsToday(stats.emailsToday ?? 0);
+    setDailyCap(stats.dailyCap ?? 50);
+    return stats;
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -23,11 +35,7 @@ export default function QueuePage() {
       const { data: me } = await supabase.from("pineyweb_clients").select("role").eq("user_id", session.user.id).single();
       if (!me || me.role !== "admin") { router.push("/dashboard"); return; }
 
-      const res = await fetch("/api/admin/queue-stats");
-      const stats = await res.json();
-      setQueue((stats.queue || []) as QueueItem[]);
-      setEmailsToday(stats.emailsToday ?? 0);
-      setDailyCap(stats.dailyCap ?? 50);
+      await fetchQueueStats();
       setLoading(false);
     };
     init();
@@ -46,6 +54,66 @@ export default function QueuePage() {
     const today = new Date().toISOString().split("T")[0];
     await supabase.from("pineyweb_daily_send_tracker").upsert({ date: today, daily_cap: 0, emails_sent: emailsToday }, { onConflict: "date" });
     setDailyCap(0);
+  };
+
+  const runUntilCap = async () => {
+    setIsRunning(true);
+    stopRef.current = false;
+    setRunProgress("Starting...");
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || "";
+
+    let citiesScanned = 0;
+    const MAX_ITERATIONS = 50;
+
+    for (let i = 0; i < MAX_ITERATIONS; i++) {
+      if (stopRef.current) {
+        setRunProgress(`Stopped — ${emailsToday} emails sent across ${citiesScanned} cities`);
+        break;
+      }
+
+      setRunProgress(`Scanning cities... ${emailsToday} emails sent / ${dailyCap} cap`);
+
+      const response = await fetch("/api/admin/cron-trigger", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+
+      // Queue exhausted or cap already reached
+      if (data.message?.includes("exhausted") || data.message?.includes("cap") || data.message?.includes("paused")) {
+        setRunProgress(data.message);
+        break;
+      }
+
+      if (data.error) {
+        setRunProgress(`Error: ${data.error}`);
+        break;
+      }
+
+      citiesScanned++;
+      const sentToday = data.emails_sent_today ?? emailsToday;
+
+      setRunProgress(`Scanned ${data.current_city} — ${sentToday} emails sent / ${data.daily_cap ?? dailyCap} cap`);
+
+      // Refresh queue table
+      await fetchQueueStats();
+
+      // Cap hit
+      if (data.cap_reached) {
+        setRunProgress(`Done — ${sentToday} emails sent across ${citiesScanned} cities. Daily cap reached.`);
+        break;
+      }
+
+      // Small delay between cities
+      await new Promise(r => setTimeout(r, 2000));
+    }
+
+    if (!stopRef.current && !runProgress.startsWith("Done") && !runProgress.startsWith("Stopped")) {
+      setRunProgress(`Done — ${emailsToday} emails sent across ${citiesScanned} cities`);
+    }
+
+    setIsRunning(false);
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#fef9f1" }}><p>Loading...</p></div>;
@@ -92,11 +160,7 @@ export default function QueuePage() {
                 setSeeding(true);
                 const res = await fetch("/api/admin/seed-queue", { method: "POST" });
                 const data = await res.json();
-                if (data.seeded) {
-                  const r = await fetch("/api/admin/queue-stats");
-                  const s = await r.json();
-                  setQueue((s.queue || []) as QueueItem[]);
-                }
+                if (data.seeded) { await fetchQueueStats(); }
                 setSeeding(false);
               }}
               disabled={seeding}
@@ -140,7 +204,7 @@ export default function QueuePage() {
         </div>
 
         {/* Controls */}
-        <div className="flex items-center gap-4 mb-10 flex-wrap">
+        <div className="flex items-center gap-4 mb-4 flex-wrap">
           <div className="flex items-center gap-2">
             <input value={newCap} onChange={e => setNewCap(e.target.value)} placeholder={String(dailyCap)} className="w-20 px-3 py-2 rounded-lg border text-sm text-center" style={{ borderColor: "#c1c9bf" }} />
             <button onClick={updateCap} className="px-4 py-2 rounded-md text-xs font-bold border" style={{ color: "#316342", borderColor: "#316342" }}>Set Cap</button>
@@ -148,7 +212,38 @@ export default function QueuePage() {
           <button onClick={pauseAutomation} disabled={dailyCap === 0} className="px-4 py-2 rounded-md text-xs font-bold text-white disabled:opacity-40" style={{ backgroundColor: "#ba1a1a" }}>
             {dailyCap === 0 ? "Paused" : "Pause Automation"}
           </button>
+          {!isRunning ? (
+            <button
+              onClick={runUntilCap}
+              disabled={dailyCap === 0 || total === 0}
+              className="px-5 py-2 rounded-md text-xs font-bold text-white disabled:opacity-40 transition-all active:scale-95"
+              style={{ backgroundColor: "#316342" }}
+            >
+              Run Until Cap
+            </button>
+          ) : (
+            <button
+              onClick={() => { stopRef.current = true; }}
+              className="px-5 py-2 rounded-md text-xs font-bold text-white transition-all active:scale-95"
+              style={{ backgroundColor: "#ba1a1a" }}
+            >
+              Stop
+            </button>
+          )}
         </div>
+
+        {/* Run progress banner */}
+        {runProgress && (
+          <div className="mb-10 p-4 rounded-xl border flex items-center gap-3 text-sm" style={{ backgroundColor: isRunning ? "#fef3c7" : "rgba(74,124,89,0.1)", borderColor: isRunning ? "#fde68a" : "rgba(193,201,191,0.3)", color: "#414942" }}>
+            {isRunning && (
+              <svg className="animate-spin h-4 w-4 shrink-0" style={{ color: "#92400e" }} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            )}
+            <span>{runProgress}</span>
+          </div>
+        )}
 
         {/* Table */}
         <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: "#f8f3eb", borderColor: "rgba(193,201,191,0.2)" }}>
