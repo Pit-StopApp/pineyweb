@@ -11,3 +11,10 @@ html {
   display: inline-block;
   line-height: 1;
 }
+
+/* Push Crisp chat widget above mobile bottom nav */
+@media (max-width: 767px) {
+  #crisp-chatbox {
+    bottom: 70px !important;
+  }
+}

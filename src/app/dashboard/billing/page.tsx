@@ -40,13 +40,29 @@ export default function Billing() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push("/login"); return; }
       const currentUserId = session.user.id;
+
+      // Try client-side first, fall back to server if RLS blocks
+      let clientData = null;
       const { data } = await supabase.from("pineyweb_clients").select("business_name, full_name, status, tier, created_at, stripe_customer_id").eq("user_id", currentUserId).single();
-      if (!data || data.status !== "active") { router.push("/?pending=1"); return; }
-      setClient(data);
+      if (data) {
+        clientData = data;
+      } else {
+        try {
+          const res = await fetch("/api/auth/me", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) });
+          const fallback = await res.json();
+          if (fallback.data) clientData = fallback.data;
+        } catch { /* fallback failed */ }
+      }
+
+      if (!clientData) { router.push("/?pending=1"); return; }
+      if (clientData.status === "suspended") { router.push("/dashboard/suspended"); return; }
+      if (clientData.status === "pending" || clientData.status === "active") { router.push("/dashboard/onboarding"); return; }
+
+      setClient(clientData);
       setLoading(false);
 
       // Fetch Stripe data
-      if (data.stripe_customer_id) {
+      if (clientData.stripe_customer_id) {
         setStripeLoading(true);
         try {
           const res = await fetch("/api/billing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: currentUserId }) });
