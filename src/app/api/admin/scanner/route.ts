@@ -79,13 +79,23 @@ export async function POST(request: NextRequest) {
     if (mode === "keywords") {
       const start = batch * BATCH_SIZE;
       const end = Math.min(start + BATCH_SIZE, KEYWORDS.length);
-      if (start >= KEYWORDS.length) return NextResponse.json({ results: [], stats, done: true });
+      if (start >= KEYWORDS.length) return NextResponse.json({ results: [], stats, done: true, debug: [] });
+
+      const debug: string[] = [];
+      debug.push(`Batch ${batch}: keywords ${start}-${end - 1} of ${KEYWORDS.length}`);
+      debug.push(`Location: ${location.lat}, ${location.lng} | City: ${cityState}`);
 
       for (let i = start; i < end; i++) {
         const q = encodeURIComponent(`${KEYWORDS[i]} near ${cityState}`);
+        const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${q}&key=${apiKey}`;
+        debug.push(`[${KEYWORDS[i]}] URL: ${url.replace(apiKey, "KEY")}`);
         try {
-          const res = await fetch(`https://maps.googleapis.com/maps/api/place/textsearch/json?query=${q}&key=${apiKey}`);
+          const res = await fetch(url);
           const data = await res.json();
+          debug.push(`[${KEYWORDS[i]}] Status: ${data.status}, Results: ${data.results?.length ?? 0}${data.error_message ? `, Error: ${data.error_message}` : ""}`);
+          if (data.results?.length > 0 && i === start) {
+            debug.push(`[${KEYWORDS[i]}] Sample: ${data.results.slice(0, 3).map((p: { name: string }) => p.name).join(", ")}`);
+          }
           for (const p of data.results || []) {
             stats.raw++;
             if (!p.place_id || seenPlaceIds.has(p.place_id)) continue;
@@ -94,12 +104,15 @@ export async function POST(request: NextRequest) {
             if (existingIds.has(p.place_id)) { stats.already_in_crm++; continue; }
             rawResults.push({ place_id: p.place_id, name: p.name });
           }
-        } catch { /* continue */ }
+        } catch (err) {
+          debug.push(`[${KEYWORDS[i]}] ERROR: ${err instanceof Error ? err.message : String(err)}`);
+        }
       }
+      debug.push(`Raw results before website check: ${rawResults.length}`);
       const done = end >= KEYWORDS.length;
-      // Check websites for this batch
       const results = await checkWebsites(rawResults, apiKey, cityState, stats);
-      return NextResponse.json({ results, stats, done, nextBatch: done ? null : batch + 1, currentKeyword: KEYWORDS[Math.min(end, KEYWORDS.length - 1)] });
+      debug.push(`After website check: ${results.length} prospects (${stats.has_website} had websites)`);
+      return NextResponse.json({ results, stats, done, nextBatch: done ? null : batch + 1, currentKeyword: KEYWORDS[Math.min(end, KEYWORDS.length - 1)], debug });
     }
 
     if (mode === "types") {
