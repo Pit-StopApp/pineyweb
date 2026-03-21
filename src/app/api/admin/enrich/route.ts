@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       const batch = prospects.slice(i, i + 5);
       await Promise.all(
         batch.map(async (prospect) => {
-          const { email, source } = await findBusinessEmail(prospect.business_name, prospect.address || "", prospect.city || "", prospect.phone);
+          const { email, source } = await findBusinessEmail(prospect.business_name, prospect.address || "", prospect.city || "");
           if (email) {
             await supabase.from("pineyweb_prospects").update({ email, email_source: source }).eq("id", prospect.id);
             enriched++;

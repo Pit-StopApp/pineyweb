@@ -294,7 +294,7 @@ async function checkWebsites(
     const batch = noWebsite.slice(i, i + 5);
     const results = await Promise.all(
       batch.map(async (p) => {
-        const { email, source } = await findBusinessEmail(p.business_name, p.address, p.city, p.phone);
+        const { email, source } = await findBusinessEmail(p.business_name, p.address, p.city);
         if (email) stats.emails_found++;
         return { ...p, email, email_source: source };
       })
