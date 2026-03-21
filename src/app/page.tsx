@@ -40,6 +40,7 @@ function HomeInner() {
       <Hero />
       <WhyPineyWeb />
       <Pricing />
+      <OutreachScanner />
       <Portfolio />
       <IntakeForm />
       <Footer />
@@ -404,6 +405,89 @@ function Pricing() {
                 </span>
               </div>
             ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─── Outreach Scanner ──────────────────────────────────────────────────── */
+function OutreachScanner() {
+  const features = [
+    "Custom-configured scanner built around your business type and ideal customer",
+    "Automated personalized cold emails sent daily",
+    "Prospective phone numbers compiled for cold calling",
+    "Bulk SMS outreach available (requires business verification)",
+    "Full prospect CRM — track who was contacted, who replied, who's interested",
+    "Daily activity summary sent to your inbox",
+  ];
+
+  const plans = [
+    { name: "Starter", volume: "25 outreaches/day", price: "$799", period: "/mo" },
+    { name: "Growth", volume: "50 outreaches/day", price: "$1,299", period: "/mo" },
+    { name: "Agency", volume: "100 outreaches/day", price: "$2,499", period: "/mo" },
+  ];
+
+  return (
+    <section className="py-20 px-6" style={{ backgroundColor: "#FAF8F5" }}>
+      <div className="max-w-5xl mx-auto">
+        <div className="rounded-2xl p-10 md:p-14" style={{ backgroundColor: "#fef9f1", borderLeft: "4px solid #4A7C59" }}>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] mb-4" style={{ color: "#8B5E3C" }}>
+            Premium Add-On
+          </p>
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3">
+            Custom Tailored Outreach Scanner
+          </h2>
+          <p className="text-lg italic mb-6" style={{ color: "#4A7C59" }}>
+            Your ideal customers, found and contacted automatically — every single day.
+          </p>
+          <p className="text-gray-700 leading-relaxed mb-10 max-w-3xl">
+            Automatically finds your ideal customers in your local area and reaches out to them on your behalf — every single day, on autopilot. All you have to do is reply to interested leads.
+          </p>
+
+          {/* What's included */}
+          <h3 className="text-sm font-bold uppercase tracking-[0.15em] text-gray-900 mb-5">
+            What&apos;s Included
+          </h3>
+          <div className="grid sm:grid-cols-2 gap-x-12 gap-y-4 mb-12">
+            {features.map((f) => (
+              <div key={f} className="flex items-start gap-3">
+                <svg className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: "#4A7C59" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="text-sm text-gray-700">{f}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Pricing cards */}
+          <div className="grid md:grid-cols-3 gap-6 mb-8">
+            {plans.map((p) => (
+              <div key={p.name} className="rounded-xl border p-6 text-center" style={{ backgroundColor: "#fff", borderColor: "#e7e2da" }}>
+                <h4 className="text-lg font-bold text-gray-900 mb-1">{p.name}</h4>
+                <p className="text-sm mb-4" style={{ color: "#4A7C59" }}>{p.volume}</p>
+                <div className="mb-2">
+                  <span className="text-3xl font-bold text-gray-900">{p.price}</span>
+                  <span className="text-gray-500 text-sm">{p.period}</span>
+                </div>
+                <p className="text-xs text-gray-500">Starting at</p>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-sm italic text-center mb-10" style={{ color: "#717971" }}>
+            Actual pricing depends on your industry, target audience, and geographic coverage. Every scanner is custom built for your business.
+          </p>
+
+          <div className="text-center">
+            <a
+              href="mailto:hello@pineyweb.com?subject=Outreach Scanner Inquiry"
+              className="inline-flex items-center justify-center px-8 py-3.5 rounded-full text-white font-medium hover:opacity-90 transition-opacity text-base"
+              style={{ backgroundColor: "#4A7C59" }}
+            >
+              Schedule a Free Consultation
+            </a>
           </div>
         </div>
       </div>
