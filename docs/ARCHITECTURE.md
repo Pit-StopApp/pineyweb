@@ -133,7 +133,28 @@ Admin-only. Sends BuildStarted or SiteLive email to a client. Verifies admin rol
   - Danger Zone: delete account (type DELETE to confirm) → deletes site_content, clients, orders, auth user
 
 ### Admin (admin role only)
-- `/admin/clients` — Full client management dashboard: table with name/business/tier/status/joined/actions, contextual action buttons per status (Send Build Started for pending, Send Site Live for in_progress, View Dashboard for all), pagination, search, stats grid (total clients, active builds, managed tier %, onboard client CTA)
+- `/admin/clients` — Client management dashboard with nav links to Scanner and Prospects
+- `/admin/scanner` — Prospect scanner: multi-pass pipeline (keywords → place types → AI reasoning), website detection via Places Details, chain exclusion, priority tiering (T1: no website + <50 reviews, T2: no website + ≥50 reviews). Batched execution to avoid timeouts. "Save to CRM" per result.
+  - API: POST /api/admin/scanner — accepts { city, state, batch, mode: 'keywords'|'types'|'ai' }
+- `/admin/prospects` — Saved prospect CRM: outreach tracking with status badges (new/contacted/follow_up/closed_won/closed_lost), follow-up dates, inline notes, contact method logging
+  - API: GET/POST/PATCH /api/admin/prospects
+
+### pineyweb_prospects table
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key |
+| place_id | TEXT | Google Place ID (unique) |
+| business_name | TEXT | Business name |
+| address | TEXT | Full address |
+| city | TEXT | City |
+| phone | TEXT | Phone number |
+| rating | NUMERIC | Google rating |
+| review_count | INTEGER | Number of reviews |
+| priority_tier | INTEGER | 1 (high) or 2 (standard) |
+| outreach_status | TEXT | new, contacted, follow_up, closed_won, closed_lost |
+| follow_up_date | DATE | Next follow-up |
+| notes | TEXT | Outreach notes |
+| contact_method | TEXT | Email, Phone, Both |
 
 ## Email Confirmation Flow (Custom via Resend)
 Supabase's built-in email confirmation is disabled. Instead:
