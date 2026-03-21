@@ -54,11 +54,8 @@ export default function Billing() {
         } catch { /* fallback failed */ }
       }
 
-      if (!clientData) { router.push("/?pending=1"); return; }
-      if (clientData.status === "suspended") { router.push("/dashboard/suspended"); return; }
-      if (clientData.status === "pending" || clientData.status === "active") { router.push("/dashboard/onboarding"); return; }
-
-      setClient(clientData);
+      // Billing is accessible to all authenticated users regardless of status
+      if (clientData) setClient(clientData);
       setLoading(false);
 
       // Fetch Stripe data

@@ -98,14 +98,24 @@ export default function EditSite() {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push("/login"); return; }
+      let clientRow = null;
       const { data } = await supabase.from("pineyweb_clients").select("id, business_name, status, deploy_hook_url").eq("user_id", session.user.id).single();
-      if (!data) { router.push("/?pending=1"); return; }
-      if (data.status === "pending" || data.status === "active") { router.push("/dashboard/onboarding"); return; }
-      if (data.status !== "live" && data.status !== "in_progress") { router.push("/?pending=1"); return; }
-      setBusinessName(data.business_name || "");
-      setClientId(data.id);
-      setDeployHookUrl(data.deploy_hook_url || null);
-      await loadContent(data.id);
+      if (data) {
+        clientRow = data;
+      } else {
+        try {
+          const res = await fetch("/api/auth/me", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: session.user.id }) });
+          const fallback = await res.json();
+          if (fallback.data) clientRow = fallback.data;
+        } catch { /* fallback failed */ }
+      }
+      if (!clientRow) { setLoading(false); return; }
+      // Edit page only available for in_progress/live — pending/active go to onboarding
+      if (clientRow.status === "pending" || clientRow.status === "active") { router.push("/dashboard/onboarding"); return; }
+      setBusinessName(clientRow.business_name || "");
+      setClientId(clientRow.id);
+      setDeployHookUrl(clientRow.deploy_hook_url || null);
+      await loadContent(clientRow.id);
       setLoading(false);
       // Show help modal on first visit
       if (typeof window !== "undefined" && localStorage.getItem("piney_edit_modal_seen") !== "true") {

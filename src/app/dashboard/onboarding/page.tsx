@@ -38,14 +38,24 @@ export default function Onboarding() {
     const init = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push("/login"); return; }
+      let clientRow = null;
       const { data } = await supabase.from("pineyweb_clients").select("id, full_name, business_name, status").eq("user_id", session.user.id).single();
-      if (!data) { router.push("/?pending=1"); return; }
-      if (data.status === "live" || data.status === "in_progress") { router.push("/dashboard/edit"); return; }
-      setClientId(data.id);
-      setClientName(data.full_name || data.business_name || "Client");
+      if (data) {
+        clientRow = data;
+      } else {
+        try {
+          const res = await fetch("/api/auth/me", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: session.user.id }) });
+          const fallback = await res.json();
+          if (fallback.data) clientRow = fallback.data;
+        } catch { /* fallback failed */ }
+      }
+      if (!clientRow) { setLoading(false); return; }
+      if (clientRow.status === "live" || clientRow.status === "in_progress") { router.push("/dashboard/edit"); return; }
+      setClientId(clientRow.id);
+      setClientName(clientRow.full_name || clientRow.business_name || "Client");
 
       // Load existing onboarding data
-      const { data: content } = await supabase.from("pineyweb_site_content").select("content_key, content_value").eq("client_id", data.id).eq("content_type", "onboarding");
+      const { data: content } = await supabase.from("pineyweb_site_content").select("content_key, content_value").eq("client_id", clientRow.id).eq("content_type", "onboarding");
       if (content) {
         const map: Record<string, string> = {};
         for (const row of content) { if (row.content_value) map[row.content_key] = row.content_value; }

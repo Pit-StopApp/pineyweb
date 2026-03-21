@@ -41,14 +41,24 @@ export default function Settings() {
       setEmail(session.user.email || "");
       setLastSignIn(session.user.last_sign_in_at ? new Date(session.user.last_sign_in_at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "Unknown");
 
+      let clientRow = null;
       const { data } = await supabase.from("pineyweb_clients").select("id, business_name, full_name, email, notification_project_updates, notification_billing, notification_announcements, status").eq("user_id", session.user.id).single();
-      if (!data || data.status === "pending") { router.push("/?pending=1"); return; }
-      setClientId(data.id);
-      setBusinessName(data.business_name || "");
-      setFullName(data.full_name || "");
-      setNewName(data.full_name || "");
-      setNewEmail(data.email || session.user.email || "");
-      setNotifs({ project_updates: data.notification_project_updates, billing: data.notification_billing, announcements: data.notification_announcements });
+      if (data) {
+        clientRow = data;
+      } else {
+        try {
+          const res = await fetch("/api/auth/me", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: session.user.id }) });
+          const fallback = await res.json();
+          if (fallback.data) clientRow = fallback.data;
+        } catch { /* fallback failed */ }
+      }
+      if (!clientRow) { setLoading(false); return; }
+      setClientId(clientRow.id);
+      setBusinessName(clientRow.business_name || "");
+      setFullName(clientRow.full_name || "");
+      setNewName(clientRow.full_name || "");
+      setNewEmail(clientRow.email || session.user.email || "");
+      setNotifs({ project_updates: clientRow.notification_project_updates ?? true, billing: clientRow.notification_billing ?? true, announcements: clientRow.notification_announcements ?? true });
       setLoading(false);
     };
     init();
