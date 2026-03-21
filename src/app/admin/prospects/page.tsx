@@ -8,7 +8,7 @@ import Link from "next/link";
 interface Prospect {
   id: string; place_id: string; business_name: string; city: string; phone: string | null;
   priority_tier: number; outreach_status: string; follow_up_date: string | null; notes: string | null;
-  contact_method: string | null; rating: number | null; review_count: number | null; email_delivered: boolean; email_spam: boolean; created_at: string; updated_at: string;
+  email: string | null; email_source: string | null; emailed_at: string | null; contact_method: string | null; rating: number | null; review_count: number | null; email_delivered: boolean; email_spam: boolean; created_at: string; updated_at: string;
 }
 
 const STATUSES = ["new", "contacted", "follow_up", "closed_won", "closed_lost"];
@@ -32,6 +32,11 @@ export default function ProspectsPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [adminName, setAdminName] = useState("Admin");
+  const [enriching, setEnriching] = useState(false);
+  const [enrichProgress, setEnrichProgress] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendProgress, setSendProgress] = useState("");
+  const [showSendConfirm, setShowSendConfirm] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -60,6 +65,49 @@ export default function ProspectsPage() {
   };
 
   const handleLogout = async () => { await supabase.auth.signOut(); router.push("/login"); };
+
+  const noEmailIds = prospects.filter(p => !p.email).map(p => p.id);
+  const readyToSend = prospects.filter(p => p.email && !p.emailed_at);
+
+  const runEnrichment = async () => {
+    if (noEmailIds.length === 0) return;
+    setEnriching(true); setEnrichProgress("Starting enrichment...");
+    const BATCH = 20;
+    let totalEnriched = 0;
+    for (let i = 0; i < noEmailIds.length; i += BATCH) {
+      const batch = noEmailIds.slice(i, i + BATCH);
+      setEnrichProgress(`Enriching... ${i} of ${noEmailIds.length}`);
+      try {
+        const res = await fetch("/api/admin/enrich", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prospect_ids: batch }) });
+        const data = await res.json();
+        totalEnriched += data.enriched || 0;
+      } catch { /* continue */ }
+    }
+    setEnrichProgress(`Found ${totalEnriched} emails out of ${noEmailIds.length} prospects`);
+    setEnriching(false);
+    await loadProspects(filter);
+    setTimeout(() => setEnrichProgress(""), 5000);
+  };
+
+  const runBulkSend = async () => {
+    setShowSendConfirm(false); setSending(true);
+    const toSend = readyToSend.map(p => ({ place_id: p.place_id, business_name: p.business_name, email: p.email!, email_source: p.email_source, address: "", city: p.city || "", phone: p.phone, rating: p.rating, review_count: p.review_count || 0, priority_tier: p.priority_tier }));
+    const BATCH = 50;
+    let totalSent = 0;
+    for (let i = 0; i < toSend.length; i += BATCH) {
+      const batch = toSend.slice(i, i + BATCH);
+      setSendProgress(`Sending... ${totalSent} of ${toSend.length}`);
+      try {
+        const res = await fetch("/api/admin/outreach", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prospects: batch }) });
+        const data = await res.json();
+        totalSent += data.sent || 0;
+      } catch { /* continue */ }
+    }
+    setSendProgress(`${totalSent} emails sent — awaiting delivery confirmation`);
+    setSending(false);
+    await loadProspects(filter);
+    setTimeout(() => setSendProgress(""), 5000);
+  };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#fef9f1" }}><p style={{ color: "#414942" }}>Loading...</p></div>;
 
@@ -105,6 +153,32 @@ export default function ProspectsPage() {
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px]" style={{ color: "#c1c9bf" }}>search</span>
           </div>
         </div>
+
+        {/* Enrichment + Bulk Send */}
+        <div className="flex items-center gap-4 mb-6 flex-wrap">
+          <button onClick={runEnrichment} disabled={enriching || noEmailIds.length === 0} className="px-5 py-2.5 rounded-md text-sm font-bold border transition-all disabled:opacity-40" style={{ color: "#316342", borderColor: "#316342" }}>
+            {enriching ? "Enriching..." : noEmailIds.length === 0 ? "All Enriched" : `Find Emails (${noEmailIds.length})`}
+          </button>
+          <button onClick={() => setShowSendConfirm(true)} disabled={sending || readyToSend.length === 0} className="px-5 py-2.5 rounded-md text-sm font-bold text-white transition-all disabled:opacity-40" style={{ backgroundColor: "#316342" }}>
+            {sending ? "Sending..." : readyToSend.length === 0 ? "No Emails Ready" : `Send Cold Outreach (${readyToSend.length})`}
+          </button>
+          {enrichProgress && <span className="text-sm italic" style={{ color: "#316342" }}>{enrichProgress}</span>}
+          {sendProgress && <span className="text-sm italic" style={{ color: "#316342" }}>{sendProgress}</span>}
+        </div>
+
+        {/* Send Confirm Modal */}
+        {showSendConfirm && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+            <div className="w-full max-w-md p-8 rounded-xl" style={{ backgroundColor: "#F5F0E8" }}>
+              <h3 className="text-xl font-bold mb-4" style={{ color: "#1d1c17" }}>Confirm Send</h3>
+              <p className="text-sm mb-2" style={{ color: "#414942" }}>You&apos;re about to send <strong>{readyToSend.length}</strong> cold emails. Prospects who have already been emailed will be skipped automatically. Proceed?</p>
+              <div className="flex gap-3 mt-6">
+                <button onClick={runBulkSend} className="flex-1 py-3 rounded-md text-sm font-bold text-white" style={{ backgroundColor: "#316342" }}>Proceed</button>
+                <button onClick={() => setShowSendConfirm(false)} className="px-6 py-3 rounded-md text-sm font-bold border" style={{ color: "#414942", borderColor: "#c1c9bf" }}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Filter Pills */}
         <div className="flex gap-2 mb-8 flex-wrap">

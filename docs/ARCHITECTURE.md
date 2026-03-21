@@ -98,10 +98,14 @@ Admin-only. Sends BuildStarted or SiteLive email to a client. Verifies admin rol
 ### POST /api/admin/outreach
 Cold email outreach via Resend. Accepts single prospect or array (max 50). Uses template `c61d6c30-11af-4c99-b9ef-2e6c74af25ea` with variables + tags containing full prospect metadata. 200ms delay between sends. Does NOT save to CRM or mark as contacted at send time — waits for delivery confirmation via Resend webhook. Returns { sent, failed, errors }.
 
+### POST /api/admin/enrich
+Accepts `{ prospect_ids: string[] }`. For each prospect with no email, uses Claude (claude-sonnet-4-20250514) with web search to find public business emails from Facebook, Yelp, BBB, Google Business, Instagram, Nextdoor, chamber of commerce directories. Runs in batches of 5 with 500ms delay. Updates pineyweb_prospects with email + email_source. Returns { enriched, failed, skipped, total }.
+
 ### Delivery-First CRM Flow
-1. Scanner finds prospects → shows in results table
-2. "Send Email" or "Send All Emails" fires outreach API
-3. Outreach API sends via Resend with prospect data in tags
+1. Scanner finds prospects → saved to CRM via "Save to CRM"
+2. "Find Emails" on Prospects page enriches all prospects without emails
+3. "Send Cold Outreach" fires outreach API for all prospects with email + no emailed_at
+4. Outreach API sends via Resend with inline HTML
 4. Resend webhook fires `email.delivered` → saves prospect to CRM with status='contacted'
 5. If prospect already in CRM, updates delivery status only
 6. Spam complaints (`email.complained`) set `email_spam: true`
