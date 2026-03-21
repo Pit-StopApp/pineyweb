@@ -17,6 +17,7 @@ export default function QueuePage() {
   const [seeding, setSeeding] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [runProgress, setRunProgress] = useState("");
+  const [currentCity, setCurrentCity] = useState("");
   const stopRef = useRef(false);
 
   const fetchQueueStats = async () => {
@@ -93,6 +94,7 @@ export default function QueuePage() {
 
       citiesScanned++;
       const sentToday = data.emails_sent_today ?? emailsToday;
+      setCurrentCity(data.current_city ?? "");
 
       setRunProgress(`Scanned ${data.current_city} — ${sentToday} emails sent / ${data.daily_cap ?? dailyCap} cap`);
 
@@ -113,6 +115,7 @@ export default function QueuePage() {
       setRunProgress(`Done — ${emailsToday} emails sent across ${citiesScanned} cities`);
     }
 
+    setCurrentCity("");
     setIsRunning(false);
   };
 
@@ -186,10 +189,30 @@ export default function QueuePage() {
             <p className="text-3xl font-bold" style={{ color: "#316342" }}>{emailsToday} / {dailyCap}</p>
             <p className="text-[10px] uppercase tracking-widest mt-1" style={{ color: "#414942" }}>Emails Today</p>
           </div>
-          <div className="p-6 rounded-xl border" style={{ backgroundColor: "#f8f3eb", borderColor: "rgba(193,201,191,0.2)" }}>
-            <p className="text-3xl font-bold" style={{ color: dailyCap === 0 ? "#ba1a1a" : "#316342" }}>{dailyCap === 0 ? "PAUSED" : "ACTIVE"}</p>
-            <p className="text-[10px] uppercase tracking-widest mt-1" style={{ color: "#414942" }}>Automation</p>
-          </div>
+          {(() => {
+            const status = isRunning
+              ? { label: "RUNNING", color: "#2563eb", bg: "rgba(37,99,235,0.08)", subtitle: `Scanning ${currentCity || "..."}` }
+              : dailyCap === 0
+              ? { label: "PAUSED", color: "#ba1a1a", bg: "rgba(186,26,26,0.06)", subtitle: "Resume to continue outreach" }
+              : emailsToday >= dailyCap
+              ? { label: "CAP REACHED", color: "#d97706", bg: "rgba(217,119,6,0.08)", subtitle: "Resets at midnight" }
+              : { label: "ACTIVE", color: "#316342", bg: "rgba(74,124,89,0.08)", subtitle: "Runs daily at 7am CT" };
+            return (
+              <div className="p-6 rounded-xl border" style={{ backgroundColor: status.bg, borderColor: "rgba(193,201,191,0.2)" }}>
+                <div className="flex items-center gap-2">
+                  {isRunning && (
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: "#22c55e" }} />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5" style={{ backgroundColor: "#22c55e" }} />
+                    </span>
+                  )}
+                  <p className="text-3xl font-bold" style={{ color: status.color }}>{status.label}</p>
+                </div>
+                <p className="text-[10px] uppercase tracking-widest mt-1" style={{ color: "#414942" }}>Automation</p>
+                <p className="text-[11px] mt-1.5 italic" style={{ color: "#717971" }}>{status.subtitle}</p>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Progress bar */}
