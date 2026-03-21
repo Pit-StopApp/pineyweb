@@ -24,13 +24,32 @@ export default function DashboardHome() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push("/login"); return; }
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("pineyweb_clients")
         .select("full_name, business_name, email, status, site_url, tier")
         .eq("user_id", session.user.id)
         .single();
 
-      if (!data) { router.push("/?pending=1"); return; }
+      console.log("[Dashboard] client status:", data?.status, "user_id:", session.user.id, "error:", error?.message || "none");
+
+      if (!data) {
+        // RLS may be blocking — try server-side fallback
+        console.log("[Dashboard] Client row null, trying server fallback...");
+        try {
+          const res = await fetch("/api/auth/me", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: session.user.id }) });
+          const fallback = await res.json();
+          if (fallback.data) {
+            console.log("[Dashboard] Server fallback status:", fallback.data.status);
+            if (fallback.data.status === "suspended") { router.push("/dashboard/suspended"); return; }
+            if (fallback.data.status === "pending" || fallback.data.status === "active") { router.push("/dashboard/onboarding"); return; }
+            setProfile(fallback.data);
+            setLoading(false);
+            return;
+          }
+        } catch (e) { console.error("[Dashboard] Server fallback failed:", e); }
+        router.push("/?pending=1");
+        return;
+      }
       if (data.status === "suspended") { router.push("/dashboard/suspended"); return; }
       if (data.status === "pending" || data.status === "active") {
         router.push("/dashboard/onboarding");
