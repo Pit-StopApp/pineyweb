@@ -19,6 +19,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (isStandalone) { setChecking(false); setAuthed(true); return; }
     const check = async () => {
       const { data: { session } } = await supabase.auth.getSession();
+      // Never redirect away from admin pages
+      if (window.location.pathname.startsWith("/admin")) return;
       if (!session) { router.push("/login"); return; }
 
       let name = "";

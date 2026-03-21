@@ -30,7 +30,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      // Token refresh with valid session should never clear state
+      if (event === "TOKEN_REFRESHED" && s) {
+        setSession(s);
+        return;
+      }
       setSession(s);
     });
 
