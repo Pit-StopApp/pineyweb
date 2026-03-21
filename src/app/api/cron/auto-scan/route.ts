@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     .select("*")
     .eq("status", "pending")
     .order("distance_from_longview_miles", { ascending: true })
-    .limit(3);
+    .limit(1);
 
   if (!cities || cities.length === 0) {
     return NextResponse.json({ message: "All cities scanned. Queue exhausted." });

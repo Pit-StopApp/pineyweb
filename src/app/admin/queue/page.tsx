@@ -23,13 +23,11 @@ export default function QueuePage() {
       const { data: me } = await supabase.from("pineyweb_clients").select("role").eq("user_id", session.user.id).single();
       if (!me || me.role !== "admin") { router.push("/dashboard"); return; }
 
-      const { data } = await supabase.from("pineyweb_scanner_queue").select("*").order("distance_from_longview_miles", { ascending: true });
-      setQueue((data || []) as QueueItem[]);
-
-      const today = new Date().toISOString().split("T")[0];
-      const { data: tracker } = await supabase.from("pineyweb_daily_send_tracker").select("emails_sent, daily_cap").eq("date", today).single();
-      setEmailsToday(tracker?.emails_sent ?? 0);
-      setDailyCap(tracker?.daily_cap ?? 50);
+      const res = await fetch("/api/admin/queue-stats");
+      const stats = await res.json();
+      setQueue((stats.queue || []) as QueueItem[]);
+      setEmailsToday(stats.emailsToday ?? 0);
+      setDailyCap(stats.dailyCap ?? 50);
       setLoading(false);
     };
     init();
@@ -95,8 +93,9 @@ export default function QueuePage() {
                 const res = await fetch("/api/admin/seed-queue", { method: "POST" });
                 const data = await res.json();
                 if (data.seeded) {
-                  const { data: q } = await supabase.from("pineyweb_scanner_queue").select("*").order("distance_from_longview_miles", { ascending: true });
-                  setQueue((q || []) as QueueItem[]);
+                  const r = await fetch("/api/admin/queue-stats");
+                  const s = await r.json();
+                  setQueue((s.queue || []) as QueueItem[]);
                 }
                 setSeeding(false);
               }}
