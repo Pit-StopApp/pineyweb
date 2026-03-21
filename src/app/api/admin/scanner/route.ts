@@ -42,8 +42,51 @@ const CHAINS = new Set([
   "State Farm", "Allstate", "RE/MAX", "Keller Williams", "Century 21",
 ]);
 
-function isChain(name: string): boolean {
-  return CHAINS.has(name.trim());
+function isChain(name: string): boolean { return CHAINS.has(name.trim()); }
+
+const SEARCH_FIELDS = "places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.rating,places.userRatingCount,places.businessStatus,places.websiteUri,places.location,places.types";
+const DETAIL_FIELDS = "id,displayName,formattedAddress,nationalPhoneNumber,rating,userRatingCount,businessStatus,websiteUri,location,types";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapPlace(p: any): { id: string; name: string; address: string; phone: string | null; rating: number | null; reviewCount: number; website: string | null; status: string | null } {
+  return {
+    id: p.id || "",
+    name: p.displayName?.text || "",
+    address: p.formattedAddress || "",
+    phone: p.nationalPhoneNumber || null,
+    rating: p.rating || null,
+    reviewCount: p.userRatingCount || 0,
+    website: p.websiteUri || null,
+    status: p.businessStatus || null,
+  };
+}
+
+async function textSearch(query: string, apiKey: string): Promise<{ id: string; name: string }[]> {
+  const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+    method: "POST",
+    headers: { "X-Goog-Api-Key": apiKey, "X-Goog-FieldMask": SEARCH_FIELDS, "Content-Type": "application/json" },
+    body: JSON.stringify({ textQuery: query }),
+  });
+  const data = await res.json();
+  return (data.places || []).map((p: { id: string; displayName?: { text: string } }) => ({ id: p.id, name: p.displayName?.text || "" }));
+}
+
+async function nearbySearch(type: string, lat: number, lng: number, radius: number, apiKey: string): Promise<{ id: string; name: string }[]> {
+  const res = await fetch("https://places.googleapis.com/v1/places:searchNearby", {
+    method: "POST",
+    headers: { "X-Goog-Api-Key": apiKey, "X-Goog-FieldMask": SEARCH_FIELDS, "Content-Type": "application/json" },
+    body: JSON.stringify({ includedTypes: [type], locationRestriction: { circle: { center: { latitude: lat, longitude: lng }, radius } } }),
+  });
+  const data = await res.json();
+  return (data.places || []).map((p: { id: string; displayName?: { text: string } }) => ({ id: p.id, name: p.displayName?.text || "" }));
+}
+
+async function getPlaceDetails(placeId: string, apiKey: string) {
+  const res = await fetch(`https://places.googleapis.com/v1/places/${placeId}`, {
+    headers: { "X-Goog-Api-Key": apiKey, "X-Goog-FieldMask": DETAIL_FIELDS },
+  });
+  const data = await res.json();
+  return mapPlace(data);
 }
 
 export async function POST(request: NextRequest) {
@@ -54,19 +97,24 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!;
     const supabase = getSupabase();
     const cityState = `${city}, ${state}`;
-    const radiusMeters = 40234; // ~25 miles
+    const radiusMeters = 40234;
 
-    // Geocode
+    // Geocode via hardcoded table, fallback to text search
     const cityKey = city.toLowerCase().trim();
     let location = TX_COORDS[cityKey] || null;
     if (!location) {
-      const geoRes = await fetch(`https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(cityState)}&key=${apiKey}`);
-      const geoData = await geoRes.json();
-      if (geoData.results?.[0]) location = geoData.results[0].geometry?.location;
+      const places = await textSearch(cityState, apiKey);
+      if (places.length > 0) {
+        const rawRes = await fetch(`https://places.googleapis.com/v1/places/${places[0].id}`, {
+          headers: { "X-Goog-Api-Key": apiKey, "X-Goog-FieldMask": "location" },
+        });
+        const rawData = await rawRes.json();
+        if (rawData.location) location = { lat: rawData.location.latitude, lng: rawData.location.longitude };
+      }
     }
     if (!location) return NextResponse.json({ error: `Could not geocode "${cityState}"` }, { status: 400 });
 
-    // Get existing place_ids
+    // Existing place_ids
     const { data: existing } = await supabase.from("pineyweb_prospects").select("place_id");
     const existingIds = new Set((existing || []).map((r: { place_id: string }) => r.place_id));
 
@@ -76,6 +124,17 @@ export async function POST(request: NextRequest) {
 
     const BATCH_SIZE = 5;
 
+    const processPlaces = (places: { id: string; name: string }[]) => {
+      for (const p of places) {
+        stats.raw++;
+        if (!p.id || seenPlaceIds.has(p.id)) continue;
+        seenPlaceIds.add(p.id);
+        if (isChain(p.name)) { stats.chains_removed++; continue; }
+        if (existingIds.has(p.id)) { stats.already_in_crm++; continue; }
+        rawResults.push({ place_id: p.id, name: p.name });
+      }
+    };
+
     if (mode === "keywords") {
       const start = batch * BATCH_SIZE;
       const end = Math.min(start + BATCH_SIZE, KEYWORDS.length);
@@ -84,26 +143,18 @@ export async function POST(request: NextRequest) {
       const debug: string[] = [];
       debug.push(`Batch ${batch}: keywords ${start}-${end - 1} of ${KEYWORDS.length}`);
       debug.push(`Location: ${location.lat}, ${location.lng} | City: ${cityState}`);
+      debug.push(`Using Places API (New) — places.googleapis.com/v1/`);
 
       for (let i = start; i < end; i++) {
-        const q = encodeURIComponent(`${KEYWORDS[i]} near ${cityState}`);
-        const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${q}&key=${apiKey}`;
-        debug.push(`[${KEYWORDS[i]}] URL: ${url.replace(apiKey, "KEY")}`);
+        const query = `${KEYWORDS[i]} near ${cityState}`;
+        debug.push(`[${KEYWORDS[i]}] Query: "${query}"`);
         try {
-          const res = await fetch(url);
-          const data = await res.json();
-          debug.push(`[${KEYWORDS[i]}] Status: ${data.status}, Results: ${data.results?.length ?? 0}${data.error_message ? `, Error: ${data.error_message}` : ""}`);
-          if (data.results?.length > 0 && i === start) {
-            debug.push(`[${KEYWORDS[i]}] Sample: ${data.results.slice(0, 3).map((p: { name: string }) => p.name).join(", ")}`);
+          const places = await textSearch(query, apiKey);
+          debug.push(`[${KEYWORDS[i]}] Results: ${places.length}`);
+          if (places.length > 0 && i === start) {
+            debug.push(`[${KEYWORDS[i]}] Sample: ${places.slice(0, 3).map(p => p.name).join(", ")}`);
           }
-          for (const p of data.results || []) {
-            stats.raw++;
-            if (!p.place_id || seenPlaceIds.has(p.place_id)) continue;
-            seenPlaceIds.add(p.place_id);
-            if (isChain(p.name)) { stats.chains_removed++; continue; }
-            if (existingIds.has(p.place_id)) { stats.already_in_crm++; continue; }
-            rawResults.push({ place_id: p.place_id, name: p.name });
-          }
+          processPlaces(places);
         } catch (err) {
           debug.push(`[${KEYWORDS[i]}] ERROR: ${err instanceof Error ? err.message : String(err)}`);
         }
@@ -122,32 +173,15 @@ export async function POST(request: NextRequest) {
 
       for (let i = start; i < end; i++) {
         try {
-          const res = await fetch(`https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${location.lat},${location.lng}&radius=${radiusMeters}&type=${PLACE_TYPES[i]}&key=${apiKey}`);
-          const data = await res.json();
-          if (data.status === "REQUEST_DENIED") {
-            // Fallback to text search
-            const q = encodeURIComponent(`${PLACE_TYPES[i]} near ${cityState}`);
-            const res2 = await fetch(`https://maps.googleapis.com/maps/api/place/textsearch/json?query=${q}&key=${apiKey}`);
-            const data2 = await res2.json();
-            for (const p of data2.results || []) {
-              stats.raw++;
-              if (!p.place_id || seenPlaceIds.has(p.place_id)) continue;
-              seenPlaceIds.add(p.place_id);
-              if (isChain(p.name)) { stats.chains_removed++; continue; }
-              if (existingIds.has(p.place_id)) { stats.already_in_crm++; continue; }
-              rawResults.push({ place_id: p.place_id, name: p.name });
-            }
-            continue;
-          }
-          for (const p of data.results || []) {
-            stats.raw++;
-            if (!p.place_id || seenPlaceIds.has(p.place_id)) continue;
-            seenPlaceIds.add(p.place_id);
-            if (isChain(p.name)) { stats.chains_removed++; continue; }
-            if (existingIds.has(p.place_id)) { stats.already_in_crm++; continue; }
-            rawResults.push({ place_id: p.place_id, name: p.name });
-          }
-        } catch { /* continue */ }
+          const places = await nearbySearch(PLACE_TYPES[i], location.lat, location.lng, radiusMeters, apiKey);
+          processPlaces(places);
+        } catch {
+          // Fallback to text search
+          try {
+            const places = await textSearch(`${PLACE_TYPES[i]} near ${cityState}`, apiKey);
+            processPlaces(places);
+          } catch { /* skip */ }
+        }
       }
       const done = end >= PLACE_TYPES.length;
       const results = await checkWebsites(rawResults, apiKey, cityState, stats);
@@ -174,17 +208,8 @@ export async function POST(request: NextRequest) {
 
       for (const term of terms.slice(0, 8)) {
         try {
-          const q = encodeURIComponent(`${term} near ${cityState}`);
-          const res = await fetch(`https://maps.googleapis.com/maps/api/place/textsearch/json?query=${q}&key=${apiKey}`);
-          const data = await res.json();
-          for (const p of data.results || []) {
-            stats.raw++;
-            if (!p.place_id || seenPlaceIds.has(p.place_id)) continue;
-            seenPlaceIds.add(p.place_id);
-            if (isChain(p.name)) { stats.chains_removed++; continue; }
-            if (existingIds.has(p.place_id)) { stats.already_in_crm++; continue; }
-            rawResults.push({ place_id: p.place_id, name: p.name });
-          }
+          const places = await textSearch(`${term} near ${cityState}`, apiKey);
+          processPlaces(places);
         } catch { /* continue */ }
       }
       const results = await checkWebsites(rawResults, apiKey, cityState, stats);
@@ -207,28 +232,26 @@ async function checkWebsites(
 
   for (const r of rawResults) {
     try {
-      const detailRes = await fetch(`https://maps.googleapis.com/maps/api/place/details/json?place_id=${r.place_id}&fields=name,website,formatted_phone_number,formatted_address,rating,user_ratings_total&key=${apiKey}`);
-      const detail = await detailRes.json();
-      const result = detail.result;
-      if (!result) continue;
+      const detail = await getPlaceDetails(r.place_id, apiKey);
+      if (!detail.id) continue;
+      if (detail.status && detail.status !== "OPERATIONAL") continue;
+      if (detail.website) { stats.has_website++; continue; }
 
-      if (result.website) { stats.has_website++; continue; }
-
-      const reviewCount = result.user_ratings_total || 0;
+      const reviewCount = detail.reviewCount;
       const tier = reviewCount < 50 ? 1 : 2;
       if (tier === 1) stats.tier_1++; else stats.tier_2++;
       stats.new_prospects++;
 
-      const addressParts = (result.formatted_address || "").split(",");
+      const addressParts = (detail.address || "").split(",");
       const city = addressParts.length >= 2 ? addressParts[1]?.trim() : cityState.split(",")[0];
 
       results.push({
         place_id: r.place_id,
-        business_name: result.name || r.name,
-        address: result.formatted_address || "",
+        business_name: detail.name || r.name,
+        address: detail.address,
         city,
-        phone: result.formatted_phone_number || null,
-        rating: result.rating || null,
+        phone: detail.phone,
+        rating: detail.rating,
         review_count: reviewCount,
         priority_tier: tier as 1 | 2,
       });

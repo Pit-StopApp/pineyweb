@@ -37,56 +37,56 @@ test.describe("scanner diagnostic", () => {
     }
   });
 
-  test("direct Google Places API call", async () => {
+  test("direct Google Places API (New) call", async () => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_API_KEY;
     if (!apiKey) {
-      console.log("No GOOGLE_API_KEY or NEXT_PUBLIC_GOOGLE_MAPS_API_KEY in env — skipping direct API test");
+      console.log("No API key in env — skipping direct API test");
       test.skip();
       return;
     }
 
-    console.log("=== Direct Google Places API Diagnostic ===");
-    const query = encodeURIComponent("restaurant near Longview, TX");
-    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${query}&key=${apiKey}`;
-    console.log("URL:", url.replace(apiKey, "REDACTED"));
+    console.log("=== Direct Google Places API (New) Diagnostic ===");
 
-    const res = await fetch(url);
-    const data = await res.json();
+    const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.businessStatus,places.websiteUri",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ textQuery: "restaurant near Longview, TX" }),
+    });
 
     console.log("HTTP status:", res.status);
-    console.log("API status:", data.status);
-    console.log("Result count:", data.results?.length ?? 0);
+    const data = await res.json();
 
-    if (data.error_message) {
-      console.error("Error message:", data.error_message);
+    if (data.error) {
+      console.error("API Error:", JSON.stringify(data.error, null, 2));
+      expect(data.error, `Google Places API error: ${data.error.message}`).toBeUndefined();
+      return;
     }
 
-    if (data.status === "REQUEST_DENIED") {
-      console.error("REQUEST_DENIED — API key may have restrictions blocking server-side calls");
-      expect(data.status, "Google Places API returned REQUEST_DENIED — check API key restrictions").not.toBe("REQUEST_DENIED");
-    }
+    const places = data.places || [];
+    console.log("Result count:", places.length);
 
-    if (data.status === "INVALID_REQUEST") {
-      console.error("INVALID_REQUEST — malformed query or missing parameters");
-      expect(data.status, "Google Places API returned INVALID_REQUEST").not.toBe("INVALID_REQUEST");
-    }
-
-    if (data.results?.length > 0) {
+    if (places.length > 0) {
       console.log("First 5 raw results (before any filtering):");
-      for (const r of data.results.slice(0, 5)) {
-        console.log(`  "${r.name}" | ${r.formatted_address} | rating: ${r.rating} | reviews: ${r.user_ratings_total} | status: ${r.business_status}`);
+      for (const p of places.slice(0, 5)) {
+        console.log(`  "${p.displayName?.text}" | ${p.formattedAddress} | rating: ${p.rating} | reviews: ${p.userRatingCount} | status: ${p.businessStatus} | website: ${p.websiteUri || "NONE"}`);
       }
 
-      // Check how many would survive chain filter
       const chains = new Set(["McDonald's", "Subway", "Walmart", "Burger King", "Wendy's", "Chick-fil-A", "Sonic", "Whataburger", "Starbucks", "Domino's", "Pizza Hut", "KFC", "Taco Bell"]);
       let chainCount = 0;
-      for (const r of data.results) {
-        if (chains.has(r.name?.trim())) chainCount++;
+      let noWebsite = 0;
+      for (const p of places) {
+        if (chains.has(p.displayName?.text?.trim())) chainCount++;
+        if (!p.websiteUri) noWebsite++;
       }
-      console.log(`Chain filter would remove: ${chainCount} of ${data.results.length}`);
-      console.log(`Remaining after chain filter: ${data.results.length - chainCount}`);
+      console.log(`Chain filter would remove: ${chainCount} of ${places.length}`);
+      console.log(`No website: ${noWebsite} of ${places.length}`);
+      console.log(`Potential prospects (no website, not chain): ${noWebsite - chainCount}`);
     } else {
-      console.log("Zero results from Places API — geocoding may have failed or no results for this query");
+      console.log("Zero results from Places API");
     }
   });
 });
