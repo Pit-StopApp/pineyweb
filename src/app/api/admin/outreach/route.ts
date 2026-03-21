@@ -6,6 +6,14 @@ function getResend() { return new Resend(process.env.RESEND_API_KEY!); }
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+function getFirstName(businessName: string): string {
+  const cleaned = businessName
+    .replace(/^the\s+/i, "")
+    .replace(/^a\s+/i, "")
+    .replace(/^an\s+/i, "");
+  return cleaned.split(" ")[0];
+}
+
 interface Prospect {
   place_id: string;
   business_name: string;
@@ -41,7 +49,7 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const firstName = prospect.business_name.split(" ")[0];
+        const firstName = getFirstName(prospect.business_name);
         const personalizedHtml = COLD_OUTREACH_HTML
           .replace(/\{\{firstName\}\}/g, firstName)
           .replace(/\{\{businessName\}\}/g, prospect.business_name)
