@@ -53,7 +53,6 @@ export default function QueuePage() {
 
   const total = queue.length;
   const scanned = queue.filter(q => q.status === "complete").length;
-  const pending = queue.filter(q => q.status === "pending").length;
   const pct = total > 0 ? Math.round((scanned / total) * 100) : 0;
 
   const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
