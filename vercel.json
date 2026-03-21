@@ -2,11 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/payment-check",
-      "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/auto-scan",
-      "schedule": "0 8 * * *"
+      "schedule": "0 13 * * *"
     }
   ]
 }
