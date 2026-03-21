@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { Resend } from "resend";
 
 function getSupabase() { return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!); }
-function getResend() { return new Resend(process.env.RESEND_API_KEY!); }
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -114,19 +112,6 @@ export async function GET(req: NextRequest) {
   // Update daily tracker
   const newEmailsToday = emailsSentToday + emailsSentThisCity;
   await supabase.from("pineyweb_daily_send_tracker").upsert({ date: today, emails_sent: newEmailsToday, daily_cap: dailyCap }, { onConflict: "date" });
-
-  // Summary email
-  if (emailsSentThisCity > 0 || prospectsFound > 0) {
-    try {
-      const resend = getResend();
-      await resend.emails.send({
-        from: "Piney Web Bot <noreply@pineyweb.com>",
-        to: "hello@pineyweb.com",
-        subject: `Auto-Scan — ${city.city}: ${emailsSentThisCity} emails sent`,
-        html: `<p style="font-family:Georgia,serif;font-size:16px;"><strong>Auto-Scan — ${city.city}</strong><br/><br/>Prospects found: ${prospectsFound}<br/>Emails found: ${emailsFound}<br/>Emails sent: ${emailsSentThisCity}<br/>Daily total: ${newEmailsToday} / ${dailyCap}<br/><br/><a href="https://pineyweb.com/admin/queue">View Queue →</a></p>`,
-      });
-    } catch { /* non-blocking */ }
-  }
 
   return NextResponse.json({
     current_city: city.city,

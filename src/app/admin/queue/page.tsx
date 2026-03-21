@@ -66,24 +66,22 @@ export default function QueuePage() {
     const token = session?.access_token || "";
 
     let citiesScanned = 0;
+    let totalEmailsSent = 0;
+    const allResults: { city: string; prospects: number; emails_found: number; emails_sent: number }[] = [];
     const MAX_ITERATIONS = 50;
 
     for (let i = 0; i < MAX_ITERATIONS; i++) {
-      if (stopRef.current) {
-        setRunProgress(`Stopped — ${emailsToday} emails sent across ${citiesScanned} cities`);
-        break;
-      }
-
-      setRunProgress(`Scanning cities... ${emailsToday} emails sent / ${dailyCap} cap`);
+      if (stopRef.current) break;
 
       const response = await fetch("/api/admin/cron-trigger", {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
 
-      // Queue exhausted or cap already reached
+      // Queue exhausted or cap already reached or paused
       if (data.message?.includes("exhausted") || data.message?.includes("cap") || data.message?.includes("paused")) {
         setRunProgress(data.message);
+        await fetchQueueStats();
         break;
       }
 
@@ -93,17 +91,25 @@ export default function QueuePage() {
       }
 
       citiesScanned++;
-      const sentToday = data.emails_sent_today ?? emailsToday;
+      totalEmailsSent += data.emails_sent ?? 0;
       setCurrentCity(data.current_city ?? "");
+      allResults.push({
+        city: data.current_city,
+        prospects: data.prospects_found ?? 0,
+        emails_found: data.emails_found ?? 0,
+        emails_sent: data.emails_sent ?? 0,
+      });
 
-      setRunProgress(`Scanned ${data.current_city} — ${sentToday} emails sent / ${data.daily_cap ?? dailyCap} cap`);
+      // Refresh queue table + stats cards with fresh server data
+      const freshStats = await fetchQueueStats();
+      const freshEmails = freshStats.emailsToday ?? 0;
+      const freshCap = freshStats.dailyCap ?? 50;
 
-      // Refresh queue table
-      await fetchQueueStats();
+      setRunProgress(`Scanned ${data.current_city} — ${freshEmails} emails sent / ${freshCap} cap`);
 
       // Cap hit
-      if (data.cap_reached) {
-        setRunProgress(`Done — ${sentToday} emails sent across ${citiesScanned} cities. Daily cap reached.`);
+      if (data.cap_reached || freshEmails >= freshCap) {
+        setRunProgress(`Done — ${freshEmails} emails sent across ${citiesScanned} cities. Daily cap reached.`);
         break;
       }
 
@@ -111,8 +117,34 @@ export default function QueuePage() {
       await new Promise(r => setTimeout(r, 2000));
     }
 
-    if (!stopRef.current && !runProgress.startsWith("Done") && !runProgress.startsWith("Stopped")) {
-      setRunProgress(`Done — ${emailsToday} emails sent across ${citiesScanned} cities`);
+    // Final stats refresh
+    const finalStats = await fetchQueueStats();
+    const finalEmails = finalStats.emailsToday ?? 0;
+    const finalCap = finalStats.dailyCap ?? 50;
+
+    if (stopRef.current) {
+      setRunProgress(`Stopped — ${finalEmails} emails sent across ${citiesScanned} cities`);
+    } else if (!runProgress.startsWith("Done") && !runProgress.includes("exhausted") && !runProgress.includes("cap") && !runProgress.includes("paused")) {
+      setRunProgress(`Done — ${finalEmails} emails sent across ${citiesScanned} cities`);
+    }
+
+    // Send one summary email for the entire run
+    if (citiesScanned > 0) {
+      try {
+        await fetch("/api/admin/send-run-summary", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            cities_scanned: citiesScanned,
+            emails_sent: finalEmails,
+            daily_cap: finalCap,
+            results: allResults,
+          }),
+        });
+      } catch { /* non-blocking */ }
     }
 
     setCurrentCity("");
