@@ -2,7 +2,7 @@ export async function findBusinessEmail(
   businessName: string,
   address: string,
   city: string,
-  phone: string | null
+  _phone: string | null
 ): Promise<{ email: string | null; source: string | null }> {
   // Try Apollo people search first — free tier, massive database
   try {
