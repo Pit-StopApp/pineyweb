@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
+import { COLD_OUTREACH_HTML } from "@/lib/emails/cold-outreach";
 
 function getResend() { return new Resend(process.env.RESEND_API_KEY!); }
 
@@ -40,12 +41,19 @@ export async function POST(request: NextRequest) {
       }
 
       try {
+        const firstName = prospect.business_name.split(" ")[0];
+        const personalizedHtml = COLD_OUTREACH_HTML
+          .replace(/\{\{firstName\}\}/g, firstName)
+          .replace(/\{\{businessName\}\}/g, prospect.business_name)
+          .replace(/\{\{reviewCount\}\}/g, String(prospect.review_count || 0))
+          .replace(/\{\{portfolioUrl\}\}/g, "https://pineyweb.com#work")
+          .replace(/\{\{unsubscribeUrl\}\}/g, `https://pineyweb.com/unsubscribe?id=${prospect.place_id}`);
+
         await resend.emails.send({
           from: "Dustin Hartman <hello@pineyweb.com>",
           to: prospect.email,
           subject: `${prospect.review_count} reviews and no website yet?`,
-          // @ts-expect-error Resend template API fields
-          template_id: "c61d6c30-11af-4c99-b9ef-2e6c74af25ea",
+          html: personalizedHtml,
           tags: [
             { name: "place_id", value: prospect.place_id },
             { name: "business_name", value: (prospect.business_name || "").substring(0, 50) },
@@ -57,15 +65,7 @@ export async function POST(request: NextRequest) {
             { name: "rating", value: String(prospect.rating || 0) },
             { name: "review_count", value: String(prospect.review_count || 0) },
           ],
-          variables: {
-            firstName: prospect.business_name.split(" ")[0],
-            businessName: prospect.business_name,
-            reviewCount: String(prospect.review_count || 0),
-            portfolioUrl: "https://pineyweb.com#work",
-            unsubscribeUrl: `https://pineyweb.com/unsubscribe?id=${prospect.place_id}`,
-          },
         });
-        // No CRM update here — wait for delivery confirmation via Resend webhook
         sent++;
       } catch (err) {
         errors.push(`${prospect.business_name}: ${err instanceof Error ? err.message : String(err)}`);
