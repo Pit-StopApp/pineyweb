@@ -36,7 +36,7 @@ const DEFAULT_COLORS = [
 
 export default function EditSite() {
   const router = useRouter();
-  const [businessName, setBusinessName] = useState("");
+  // businessName provided by dashboard layout
   const [clientId, setClientId] = useState<string | null>(null);
   const [deployHookUrl, setDeployHookUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -112,7 +112,7 @@ export default function EditSite() {
       if (!clientRow) { setLoading(false); return; }
       // Edit page only available for in_progress/live — pending/active go to onboarding
       if (clientRow.status === "pending" || clientRow.status === "active") { router.push("/dashboard/onboarding"); return; }
-      setBusinessName(clientRow.business_name || "");
+      // businessName handled by layout
       setClientId(clientRow.id);
       setDeployHookUrl(clientRow.deploy_hook_url || null);
       await loadContent(clientRow.id);
@@ -125,7 +125,7 @@ export default function EditSite() {
     checkAuth();
   }, [router, loadContent]);
 
-  const handleLogout = async () => { await supabase.auth.signOut(); router.push("/login"); };
+  // Logout handled by dashboard layout
 
   const saveDraft = async () => {
     if (!clientId) return;
