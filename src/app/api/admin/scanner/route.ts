@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
 
     const seenPlaceIds = new Set<string>();
     const rawResults: { place_id: string; name: string }[] = [];
-    const stats = { raw: 0, chains_removed: 0, has_website: 0, already_in_crm: 0, new_prospects: 0, tier_1: 0, tier_2: 0 };
+    const stats = { raw: 0, chains_removed: 0, has_website: 0, zero_reviews_skipped: 0, already_in_crm: 0, new_prospects: 0, tier_1: 0, tier_2: 0 };
 
     const BATCH_SIZE = 5;
 
@@ -230,7 +230,7 @@ async function checkWebsites(
   rawResults: { place_id: string; name: string }[],
   apiKey: string,
   cityState: string,
-  stats: { has_website: number; new_prospects: number; tier_1: number; tier_2: number },
+  stats: { has_website: number; zero_reviews_skipped: number; new_prospects: number; tier_1: number; tier_2: number },
 ) {
   const results: { place_id: string; business_name: string; address: string; city: string; phone: string | null; rating: number | null; review_count: number | null; priority_tier: 1 | 2 }[] = [];
 
@@ -242,7 +242,10 @@ async function checkWebsites(
       if (detail.website) { stats.has_website++; continue; }
 
       const reviewCount = detail.reviewCount;
-      const tier = reviewCount < 50 ? 1 : 2;
+      // Skip 0-review businesses (likely inactive or shell companies)
+      if (reviewCount === 0) { stats.zero_reviews_skipped++; continue; }
+      // Tier 1: 5-50 reviews (established but small), Tier 2: >50 or <5
+      const tier = (reviewCount >= 5 && reviewCount <= 50) ? 1 : 2;
       if (tier === 1) stats.tier_1++; else stats.tier_2++;
       stats.new_prospects++;
 

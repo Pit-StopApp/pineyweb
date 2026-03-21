@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 
 interface Result { place_id: string; business_name: string; address: string; city: string; phone: string | null; rating: number | null; review_count: number | null; priority_tier: 1 | 2; }
-interface Stats { raw: number; chains_removed: number; has_website: number; already_in_crm: number; new_prospects: number; tier_1: number; tier_2: number; }
+interface Stats { raw: number; chains_removed: number; has_website: number; zero_reviews_skipped: number; already_in_crm: number; new_prospects: number; tier_1: number; tier_2: number; }
 
 export default function ScannerPage() {
   const router = useRouter();
@@ -16,7 +16,7 @@ export default function ScannerPage() {
   const [progress, setProgress] = useState("");
   const [progressPct, setProgressPct] = useState(0);
   const [results, setResults] = useState<Result[]>([]);
-  const [stats, setStats] = useState<Stats>({ raw: 0, chains_removed: 0, has_website: 0, already_in_crm: 0, new_prospects: 0, tier_1: 0, tier_2: 0 });
+  const [stats, setStats] = useState<Stats>({ raw: 0, chains_removed: 0, has_website: 0, zero_reviews_skipped: 0, already_in_crm: 0, new_prospects: 0, tier_1: 0, tier_2: 0 });
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [adminName, setAdminName] = useState("Admin");
@@ -35,15 +35,16 @@ export default function ScannerPage() {
 
   const mergeStats = (prev: Stats, next: Stats): Stats => ({
     raw: prev.raw + next.raw, chains_removed: prev.chains_removed + next.chains_removed,
-    has_website: prev.has_website + next.has_website, already_in_crm: prev.already_in_crm + next.already_in_crm,
+    has_website: prev.has_website + next.has_website, zero_reviews_skipped: prev.zero_reviews_skipped + (next.zero_reviews_skipped || 0),
+    already_in_crm: prev.already_in_crm + next.already_in_crm,
     new_prospects: prev.new_prospects + next.new_prospects, tier_1: prev.tier_1 + next.tier_1, tier_2: prev.tier_2 + next.tier_2,
   });
 
   const runScan = async () => {
     setScanning(true); setResults([]); setProgressPct(0);
-    setStats({ raw: 0, chains_removed: 0, has_website: 0, already_in_crm: 0, new_prospects: 0, tier_1: 0, tier_2: 0 });
+    setStats({ raw: 0, chains_removed: 0, has_website: 0, zero_reviews_skipped: 0, already_in_crm: 0, new_prospects: 0, tier_1: 0, tier_2: 0 });
     const allResults: Result[] = [];
-    let runningStats: Stats = { raw: 0, chains_removed: 0, has_website: 0, already_in_crm: 0, new_prospects: 0, tier_1: 0, tier_2: 0 };
+    let runningStats: Stats = { raw: 0, chains_removed: 0, has_website: 0, zero_reviews_skipped: 0, already_in_crm: 0, new_prospects: 0, tier_1: 0, tier_2: 0 };
     const totalSteps = 9 + 6 + 1; // ~9 keyword batches + ~6 type batches + 1 AI
     let step = 0;
 
@@ -156,8 +157,10 @@ export default function ScannerPage() {
           <div className="flex justify-center gap-0 mb-16 flex-wrap">
             {[
               { label: "Raw Results", val: stats.raw },
-              { label: "Chains Removed", val: stats.chains_removed },
-              { label: "New Prospects", val: stats.new_prospects },
+              { label: "Chains", val: stats.chains_removed },
+              { label: "Has Website", val: stats.has_website },
+              { label: "0 Reviews", val: stats.zero_reviews_skipped },
+              { label: "Prospects", val: stats.new_prospects },
               { label: "Tier 1", val: stats.tier_1 },
               { label: "Tier 2", val: stats.tier_2 },
             ].map((s, i) => (
