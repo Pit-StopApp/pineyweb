@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { COLD_OUTREACH_HTML } from "@/lib/emails/cold-outreach";
 
+function getSupabase() { return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!); }
 function getResend() { return new Resend(process.env.RESEND_API_KEY!); }
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -37,11 +39,29 @@ export async function POST(request: NextRequest) {
     }
 
     const resend = getResend();
+    const supabase = getSupabase();
+
+    // Deduplicate: filter out email addresses already sent to
+    const { data: alreadyEmailed } = await supabase
+      .from("pineyweb_prospects")
+      .select("email")
+      .not("emailed_at", "is", null);
+    const emailedAddresses = new Set(alreadyEmailed?.map(p => p.email) ?? []);
+
+    // Also deduplicate within the batch itself (keep first occurrence)
+    const seenInBatch = new Set<string>();
+    const uniqueProspects = prospects.filter(p => {
+      if (!p.email || emailedAddresses.has(p.email) || seenInBatch.has(p.email)) return false;
+      seenInBatch.add(p.email);
+      return true;
+    });
+
     let sent = 0;
     let failed = 0;
+    const skipped = prospects.length - uniqueProspects.length;
     const errors: string[] = [];
 
-    for (const prospect of prospects) {
+    for (const prospect of uniqueProspects) {
       if (!prospect.email || !prospect.place_id) {
         errors.push(`${prospect.business_name}: missing email or place_id`);
         failed++;
@@ -75,6 +95,11 @@ export async function POST(request: NextRequest) {
           failed++;
         } else {
           console.log("[Outreach] Sent successfully, id:", result.data?.id);
+          // Set emailed_at immediately on ALL prospects sharing this email address
+          await supabase
+            .from("pineyweb_prospects")
+            .update({ emailed_at: new Date().toISOString() })
+            .eq("email", prospect.email);
           sent++;
         }
       } catch (err) {
@@ -85,7 +110,7 @@ export async function POST(request: NextRequest) {
       if (prospects.length > 1) await sleep(200);
     }
 
-    return NextResponse.json({ sent, failed, errors });
+    return NextResponse.json({ sent, failed, skipped, errors });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
