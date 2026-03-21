@@ -61,13 +61,17 @@ function mapPlace(p: any): { id: string; name: string; address: string; phone: s
   };
 }
 
-async function textSearch(query: string, apiKey: string): Promise<{ id: string; name: string }[]> {
+async function textSearch(query: string, apiKey: string, debug?: string[]): Promise<{ id: string; name: string }[]> {
   const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
     method: "POST",
     headers: { "X-Goog-Api-Key": apiKey, "X-Goog-FieldMask": SEARCH_FIELDS, "Content-Type": "application/json" },
     body: JSON.stringify({ textQuery: query }),
   });
   const data = await res.json();
+  if (debug) {
+    debug.push(`  → HTTP ${res.status} | data.places: ${data.places?.length ?? "undefined"} | data.results: ${data.results?.length ?? "undefined"} | data.error: ${data.error?.message ?? "none"}`);
+    if (data.places?.[0]) debug.push(`  → First: id=${data.places[0].id}, name="${data.places[0].displayName?.text}", website=${data.places[0].websiteUri ?? "NONE"}`);
+  }
   return (data.places || []).map((p: { id: string; displayName?: { text: string } }) => ({ id: p.id, name: p.displayName?.text || "" }));
 }
 
@@ -149,8 +153,8 @@ export async function POST(request: NextRequest) {
         const query = `${KEYWORDS[i]} near ${cityState}`;
         debug.push(`[${KEYWORDS[i]}] Query: "${query}"`);
         try {
-          const places = await textSearch(query, apiKey);
-          debug.push(`[${KEYWORDS[i]}] Results: ${places.length}`);
+          const places = await textSearch(query, apiKey, debug);
+          debug.push(`[${KEYWORDS[i]}] Mapped results: ${places.length}`);
           if (places.length > 0 && i === start) {
             debug.push(`[${KEYWORDS[i]}] Sample: ${places.slice(0, 3).map(p => p.name).join(", ")}`);
           }
