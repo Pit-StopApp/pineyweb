@@ -3,12 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import DashboardShell from "@/components/DashboardShell";
+// DashboardShell provided by layout.tsx
 
 export default function Settings() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [businessName, setBusinessName] = useState("");
+  // businessName provided by dashboard layout
   const [clientId, setClientId] = useState("");
   const [userId, setUserId] = useState("");
   const [email, setEmail] = useState("");
@@ -54,7 +54,7 @@ export default function Settings() {
       }
       if (!clientRow) { setLoading(false); return; }
       setClientId(clientRow.id);
-      setBusinessName(clientRow.business_name || "");
+      // businessName handled by layout
       setFullName(clientRow.full_name || "");
       setNewName(clientRow.full_name || "");
       setNewEmail(clientRow.email || session.user.email || "");
@@ -64,7 +64,7 @@ export default function Settings() {
     init();
   }, [router]);
 
-  const handleLogout = async () => { await supabase.auth.signOut(); router.push("/login"); };
+  // Logout handled by dashboard layout
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(""), 3000); };
 
   const saveName = async () => {
@@ -111,12 +111,12 @@ export default function Settings() {
     setDeleting(false);
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#fef9f1" }}><p style={{ color: "#414942" }}>Loading...</p></div>;
+  if (loading) return <div className="flex items-center justify-center py-32"><p style={{ color: "#414942" }}>Loading...</p></div>;
 
   const inputCls = "w-full px-4 py-2.5 rounded-lg border text-sm" as const;
 
   return (
-    <DashboardShell businessName={businessName} onLogout={handleLogout}>
+    <>
       <div className="max-w-3xl mx-auto">
         <header className="mb-10">
           <span className="text-xs uppercase tracking-[0.15em] font-bold mb-2 block" style={{ color: "#805533" }}>Preferences</span>
@@ -237,6 +237,6 @@ export default function Settings() {
           </div>
         )}
       </div>
-    </DashboardShell>
+    </>
   );
 }

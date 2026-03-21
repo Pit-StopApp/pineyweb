@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Image from "next/image";
-import DashboardShell from "@/components/DashboardShell";
+// DashboardShell provided by layout.tsx
 
 type Tab = "images" | "text" | "colors";
 
@@ -191,7 +191,7 @@ export default function EditSite() {
     setDontShowAgain(false);
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#fef9f1" }}><p style={{ color: "#414942" }}>Loading...</p></div>;
+  if (loading) return <div className="flex items-center justify-center py-32"><p style={{ color: "#414942" }}>Loading...</p></div>;
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "text", label: "TEXT" },
@@ -200,7 +200,7 @@ export default function EditSite() {
   ];
 
   return (
-    <DashboardShell businessName={businessName} onLogout={handleLogout}>
+    <>
       <header className="mb-8 flex items-center justify-between">
         <div>
           <span className="text-xs uppercase tracking-widest mb-2 block" style={{ color: "#805533" }}>Editor Mode</span>
@@ -417,6 +417,6 @@ export default function EditSite() {
           </div>
         </div>
       </footer>
-    </DashboardShell>
+    </>
   );
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import DashboardShell from "@/components/DashboardShell";
+// DashboardShell provided by layout.tsx
 
 interface ClientProfile {
   full_name: string;
@@ -61,14 +61,11 @@ export default function DashboardHome() {
     checkAuth();
   }, [router]);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-  };
+  // Logout handled by dashboard layout
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#fef9f1" }}>
+      <div className="flex items-center justify-center py-32">
         <p style={{ color: "#414942" }}>Loading...</p>
       </div>
     );
@@ -80,7 +77,7 @@ export default function DashboardHome() {
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   return (
-    <DashboardShell businessName={profile?.business_name} onLogout={handleLogout}>
+    <>
       {/* Header */}
       <div className="mb-12">
         <span className="text-xs tracking-[0.15em] uppercase font-bold mb-2 block" style={{ color: "#316342" }}>DASHBOARD OVERVIEW</span>
@@ -157,6 +154,6 @@ export default function DashboardHome() {
           <p className="text-2xl font-bold" style={{ color: "#1d1c17" }}>—</p>
         </div>
       </div>
-    </DashboardShell>
+    </>
   );
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import Link from "next/link";
+// Nav provided by layout.tsx
 
 interface ClientData {
   business_name: string;
@@ -73,33 +73,17 @@ export default function Billing() {
     init();
   }, [router]);
 
-  const handleLogout = async () => { await supabase.auth.signOut(); router.push("/login"); };
+  // Logout handled by dashboard layout
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#fef9f1", fontFamily: "'Lora', serif" }}><p style={{ color: "#414942" }}>Loading...</p></div>;
+  if (loading) return <div className="flex items-center justify-center py-32"><p style={{ color: "#414942" }}>Loading...</p></div>;
 
   const tier = client?.tier || "Managed";
   const isManaged = tier === "Managed";
   const status = client?.status || "active";
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: "#fef9f1", fontFamily: "'Lora', serif" }}>
-      {/* Top Nav */}
-      <header className="sticky top-0 w-full z-50 backdrop-blur-xl" style={{ backgroundColor: "rgba(254,249,241,0.8)", boxShadow: "0 12px 40px rgba(48,20,0,0.06)" }}>
-        <div className="flex justify-between items-center px-8 py-4 max-w-screen-2xl mx-auto">
-          <Link href="/" className="text-2xl font-bold tracking-tighter" style={{ color: "#316342" }}>Piney Web Co.</Link>
-          <nav className="hidden md:flex items-center gap-8">
-            <Link href="/dashboard" className="transition-colors" style={{ color: "#414942" }}>Dashboard</Link>
-            <Link href="/dashboard/edit" className="transition-colors" style={{ color: "#414942" }}>Edit Site</Link>
-            <span className="font-semibold pb-1" style={{ color: "#316342", borderBottom: "2px solid #316342" }}>Billing</span>
-          </nav>
-          <div className="flex items-center gap-6">
-            <span className="italic" style={{ color: "#414942" }}>{client?.full_name || "Client"}</span>
-            <button onClick={handleLogout} className="px-5 py-2 rounded-md font-medium text-white active:scale-95 transition-all" style={{ backgroundColor: "#316342" }}>Logout</button>
-          </div>
-        </div>
-      </header>
-
-      <main className="flex-grow max-w-screen-xl mx-auto w-full px-8 py-16">
+    <div className="max-w-screen-xl mx-auto w-full">
+      <div className="px-2 md:px-4 py-8 md:py-16">
         {/* Page Title */}
         <div className="mb-12">
           <span className="text-xs uppercase tracking-[0.2em] font-semibold mb-2 block" style={{ color: "#805533" }}>Account Administration</span>
@@ -224,20 +208,7 @@ export default function Billing() {
             Billing is managed securely through Stripe. To update payment details or cancel your subscription, use the Manage button above. Piney Web Co. does not store your full card details on our servers.
           </p>
         </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="w-full mt-auto pt-12 pb-8 px-8" style={{ backgroundColor: "#f8f3eb" }}>
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4 max-w-screen-2xl mx-auto">
-          <div className="text-lg font-semibold" style={{ color: "#316342" }}>Piney Web Co.</div>
-          <p className="text-sm italic" style={{ color: "#414942" }}>&copy; 2026 Piney Web Co. Crafted with Precision.</p>
-          <div className="flex gap-6 text-sm italic">
-            <a href="https://pineyweb.com/privacy" className="underline underline-offset-4 transition-opacity" style={{ color: "#414942" }}>Privacy Policy</a>
-            <a href="https://pineyweb.com/terms" className="transition-opacity" style={{ color: "#414942" }}>Terms of Service</a>
-            <a href="mailto:hello@pineyweb.com" className="transition-opacity" style={{ color: "#414942" }}>Contact Support</a>
-          </div>
-        </div>
-      </footer>
+      </div>
     </div>
   );
 }
