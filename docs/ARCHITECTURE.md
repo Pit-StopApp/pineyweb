@@ -92,6 +92,14 @@ Admin-only. Sends BuildStarted or SiteLive email to a client. Verifies admin rol
 ### POST /api/admin/outreach
 Cold email outreach via Resend. Accepts single prospect or array (max 50). Uses template `c61d6c30-11af-4c99-b9ef-2e6c74af25ea` with variables: firstName, businessName, reviewCount, portfolioUrl, unsubscribeUrl. 200ms delay between sends. Updates prospect status to 'contacted' and sets emailed_at. Returns { sent, failed, errors }.
 
+### Email Enrichment Pipeline
+After website detection filters prospects, the scanner enriches each with email lookup:
+- Uses Claude (claude-sonnet-4-6) with web search to find public business emails
+- Checks Facebook, Yelp, BBB, Google Business, Instagram, and other public listings
+- Runs in parallel batches of 5 with 500ms delay between batches
+- Returns email + email_source (e.g. "Facebook", "Yelp", "BBB")
+- Fields: `email` (string|null), `email_source` (string|null) on each prospect
+
 ## Pages
 
 ### Public (continued)

@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 
-interface Result { place_id: string; business_name: string; address: string; city: string; phone: string | null; rating: number | null; review_count: number | null; priority_tier: 1 | 2; }
-interface Stats { raw: number; chains_removed: number; has_website: number; zero_reviews_skipped: number; already_in_crm: number; new_prospects: number; tier_1: number; tier_2: number; }
+interface Result { place_id: string; business_name: string; address: string; city: string; phone: string | null; email: string | null; email_source: string | null; rating: number | null; review_count: number | null; priority_tier: 1 | 2; }
+interface Stats { raw: number; chains_removed: number; has_website: number; zero_reviews_skipped: number; already_in_crm: number; new_prospects: number; tier_1: number; tier_2: number; emails_found: number; }
 
 export default function ScannerPage() {
   const router = useRouter();
@@ -16,7 +16,7 @@ export default function ScannerPage() {
   const [progress, setProgress] = useState("");
   const [progressPct, setProgressPct] = useState(0);
   const [results, setResults] = useState<Result[]>([]);
-  const [stats, setStats] = useState<Stats>({ raw: 0, chains_removed: 0, has_website: 0, zero_reviews_skipped: 0, already_in_crm: 0, new_prospects: 0, tier_1: 0, tier_2: 0 });
+  const [stats, setStats] = useState<Stats>({ raw: 0, chains_removed: 0, has_website: 0, zero_reviews_skipped: 0, already_in_crm: 0, new_prospects: 0, tier_1: 0, tier_2: 0, emails_found: 0 });
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [emailed, setEmailed] = useState<Set<string>>(new Set());
   const [bulkSending, setBulkSending] = useState(false);
@@ -41,12 +41,12 @@ export default function ScannerPage() {
     raw: prev.raw + next.raw, chains_removed: prev.chains_removed + next.chains_removed,
     has_website: prev.has_website + next.has_website, zero_reviews_skipped: prev.zero_reviews_skipped + (next.zero_reviews_skipped || 0),
     already_in_crm: prev.already_in_crm + next.already_in_crm,
-    new_prospects: prev.new_prospects + next.new_prospects, tier_1: prev.tier_1 + next.tier_1, tier_2: prev.tier_2 + next.tier_2,
+    new_prospects: prev.new_prospects + next.new_prospects, tier_1: prev.tier_1 + next.tier_1, tier_2: prev.tier_2 + next.tier_2, emails_found: prev.emails_found + (next.emails_found || 0),
   });
 
   const runScan = async () => {
     setScanning(true); setResults([]); setProgressPct(0);
-    setStats({ raw: 0, chains_removed: 0, has_website: 0, zero_reviews_skipped: 0, already_in_crm: 0, new_prospects: 0, tier_1: 0, tier_2: 0 });
+    setStats({ raw: 0, chains_removed: 0, has_website: 0, zero_reviews_skipped: 0, already_in_crm: 0, new_prospects: 0, tier_1: 0, tier_2: 0, emails_found: 0 });
     const allResults: Result[] = [];
     const seenIds = new Set<string>();
     let dupeCount = 0;
@@ -57,7 +57,7 @@ export default function ScannerPage() {
         allResults.push(r);
       }
     };
-    let runningStats: Stats = { raw: 0, chains_removed: 0, has_website: 0, zero_reviews_skipped: 0, already_in_crm: 0, new_prospects: 0, tier_1: 0, tier_2: 0 };
+    let runningStats: Stats = { raw: 0, chains_removed: 0, has_website: 0, zero_reviews_skipped: 0, already_in_crm: 0, new_prospects: 0, tier_1: 0, tier_2: 0, emails_found: 0 };
     const totalSteps = 9 + 6 + 1;
     let step = 0;
 
@@ -100,15 +100,14 @@ export default function ScannerPage() {
   };
 
   const saveProspect = async (r: Result) => {
-    await fetch("/api/admin/prospects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(r) });
+    await fetch("/api/admin/prospects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...r, email_source: r.email_source }) });
     setSaved(prev => new Set(prev).add(r.place_id));
   };
 
   const sendEmail = async (r: Result) => {
-    if (!r.phone) return; // phone used as proxy for having contact info
-    // Save first if not already saved
+    if (!r.email) return;
     if (!saved.has(r.place_id)) await saveProspect(r);
-    await fetch("/api/admin/outreach", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: r.place_id, business_name: r.business_name, email: r.phone, review_count: r.review_count }) });
+    await fetch("/api/admin/outreach", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: r.place_id, business_name: r.business_name, email: r.email, review_count: r.review_count }) });
     setEmailed(prev => new Set(prev).add(r.place_id));
   };
 
@@ -125,7 +124,7 @@ export default function ScannerPage() {
       // Save all in batch first
       for (const r of batches[b]) { if (!saved.has(r.place_id)) await saveProspect(r); }
       // Send emails
-      const prospects = batches[b].map(r => ({ id: r.place_id, business_name: r.business_name, email: r.phone || "", review_count: r.review_count || 0 }));
+      const prospects = batches[b].filter(r => r.email).map(r => ({ id: r.place_id, business_name: r.business_name, email: r.email || "", review_count: r.review_count || 0 }));
       const res = await fetch("/api/admin/outreach", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prospects }) });
       const data = await res.json();
       totalSent += data.sent || 0;
@@ -207,6 +206,7 @@ export default function ScannerPage() {
               { label: "Has Website", val: stats.has_website },
               { label: "0 Reviews", val: stats.zero_reviews_skipped },
               { label: "Prospects", val: stats.new_prospects },
+              { label: "Emails", val: stats.emails_found },
               { label: "Tier 1", val: stats.tier_1 },
               { label: "Tier 2", val: stats.tier_2 },
             ].map((s, i) => (
@@ -305,6 +305,7 @@ function ResultTable({ results, saved, emailed, onSave, onEmail }: { results: Re
           <th className="py-3" style={thStyle("business_name")} onClick={() => toggleSort("business_name")}>Business Name{arrow("business_name")}</th>
           <th className="py-3" style={{ color: "#414942" }}>Address</th>
           <th className="py-3" style={{ color: "#414942" }}>Phone</th>
+          <th className="py-3" style={{ color: "#414942" }}>Email</th>
           <th className="py-3" style={thStyle("rating")} onClick={() => toggleSort("rating")}>Rating{arrow("rating")}</th>
           <th className="py-3" style={thStyle("review_count")} onClick={() => toggleSort("review_count")}>Reviews{arrow("review_count")}</th>
           <th className="py-3 text-right pr-6" style={{ color: "#414942" }}>Actions</th>
@@ -319,6 +320,11 @@ function ResultTable({ results, saved, emailed, onSave, onEmail }: { results: Re
             <td className="py-4 font-semibold" style={{ color: "#1d1c17" }}>{r.business_name}</td>
             <td className="py-4 text-sm" style={{ color: "#414942" }}>{r.address}</td>
             <td className="py-4 text-sm">{r.phone ? <a href={`tel:${r.phone}`} className="underline underline-offset-4" style={{ color: "#316342" }}>{r.phone}</a> : <span style={{ color: "#c1c9bf" }}>—</span>}</td>
+            <td className="py-4 text-sm">
+              {r.email ? (
+                <div><a href={`mailto:${r.email}`} className="underline underline-offset-4" style={{ color: "#316342" }}>{r.email}</a>{r.email_source && <span className="block text-[10px]" style={{ color: "#717971" }}>via {r.email_source}</span>}</div>
+              ) : <span style={{ color: "#c1c9bf" }}>—</span>}
+            </td>
             <td className="py-4 text-sm" style={{ color: "#414942" }}>{r.rating ? `⭐ ${r.rating}` : <span style={{ color: "#c1c9bf" }}>—</span>}</td>
             <td className="py-4 text-sm" style={{ color: "#717971" }}>{r.review_count ?? 0}</td>
             <td className="py-4 text-right pr-6">
@@ -328,7 +334,7 @@ function ResultTable({ results, saved, emailed, onSave, onEmail }: { results: Re
                 </button>
                 {emailed.has(r.place_id) ? (
                   <button disabled className="px-3 py-1.5 rounded-md text-xs font-bold" style={{ backgroundColor: "rgba(193,201,191,0.2)", color: "#717971" }}>Emailed ✓</button>
-                ) : !r.phone ? (
+                ) : !r.email ? (
                   <button disabled className="px-3 py-1.5 rounded-md text-xs font-bold" style={{ backgroundColor: "rgba(193,201,191,0.1)", color: "#c1c9bf" }}>No Email</button>
                 ) : (
                   <button onClick={() => onEmail(r)} className="px-3 py-1.5 rounded-md text-xs font-bold border transition-all" style={{ color: "#805533", borderColor: "#805533", backgroundColor: "transparent" }}>Send Email</button>

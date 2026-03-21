@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
 
     const seenPlaceIds = new Set<string>();
     const rawResults: { place_id: string; name: string }[] = [];
-    const stats = { raw: 0, chains_removed: 0, has_website: 0, zero_reviews_skipped: 0, already_in_crm: 0, new_prospects: 0, tier_1: 0, tier_2: 0 };
+    const stats = { raw: 0, chains_removed: 0, has_website: 0, zero_reviews_skipped: 0, already_in_crm: 0, new_prospects: 0, tier_1: 0, tier_2: 0, emails_found: 0 };
 
     const BATCH_SIZE = 5;
 
@@ -247,13 +247,37 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function findBusinessEmail(businessName: string, address: string, city: string): Promise<{ email: string | null; source: string | null }> {
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (!anthropicKey) return { email: null, source: null };
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": anthropicKey, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6", max_tokens: 500,
+        tools: [{ type: "web_search_20250305", name: "web_search" }],
+        system: `You are a business contact finder. Search for the public email address of the business provided. Check their Facebook page, Yelp listing, BBB profile, Google Business profile, Instagram bio, and any other public listings. Return ONLY a valid JSON object with no markdown, no explanation: {"email": "found@email.com", "source": "Facebook"} or {"email": null, "source": null} if not found. Never guess or fabricate an email address.`,
+        messages: [{ role: "user", content: `Find the public contact email for: ${businessName}, located at ${address}, ${city}, TX` }],
+      }),
+    });
+    const data = await res.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const text = (data.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
+    const clean = text.replace(/```json|```/g, "").trim();
+    return JSON.parse(clean);
+  } catch { return { email: null, source: null }; }
+}
+
 async function checkWebsites(
   rawResults: { place_id: string; name: string }[],
   apiKey: string,
   cityState: string,
-  stats: { has_website: number; zero_reviews_skipped: number; new_prospects: number; tier_1: number; tier_2: number },
+  stats: { has_website: number; zero_reviews_skipped: number; new_prospects: number; tier_1: number; tier_2: number; emails_found: number },
 ) {
-  const results: { place_id: string; business_name: string; address: string; city: string; phone: string | null; rating: number | null; review_count: number | null; priority_tier: 1 | 2 }[] = [];
+  interface ProspectResult { place_id: string; business_name: string; address: string; city: string; phone: string | null; email: string | null; email_source: string | null; rating: number | null; review_count: number | null; priority_tier: 1 | 2; }
+  const noWebsite: ProspectResult[] = [];
 
   for (const r of rawResults) {
     try {
@@ -263,9 +287,7 @@ async function checkWebsites(
       if (detail.website) { stats.has_website++; continue; }
 
       const reviewCount = detail.reviewCount;
-      // Skip 0-review businesses (likely inactive or shell companies)
       if (reviewCount === 0) { stats.zero_reviews_skipped++; continue; }
-      // Tier 1: 5-50 reviews (established but small), Tier 2: >50 or <5
       const tier = (reviewCount >= 5 && reviewCount <= 50) ? 1 : 2;
       if (tier === 1) stats.tier_1++; else stats.tier_2++;
       stats.new_prospects++;
@@ -273,12 +295,14 @@ async function checkWebsites(
       const addressParts = (detail.address || "").split(",");
       const city = addressParts.length >= 2 ? addressParts[1]?.trim() : cityState.split(",")[0];
 
-      results.push({
+      noWebsite.push({
         place_id: r.place_id,
         business_name: detail.name || r.name,
         address: detail.address,
         city,
         phone: detail.phone,
+        email: null,
+        email_source: null,
         rating: detail.rating,
         review_count: reviewCount,
         priority_tier: tier as 1 | 2,
@@ -286,5 +310,20 @@ async function checkWebsites(
     } catch { /* skip */ }
   }
 
-  return results;
+  // Email enrichment in parallel batches of 5
+  const enriched: ProspectResult[] = [];
+  for (let i = 0; i < noWebsite.length; i += 5) {
+    const batch = noWebsite.slice(i, i + 5);
+    const results = await Promise.all(
+      batch.map(async (p) => {
+        const { email, source } = await findBusinessEmail(p.business_name, p.address, p.city);
+        if (email) stats.emails_found++;
+        return { ...p, email, email_source: source };
+      })
+    );
+    enriched.push(...results);
+    if (i + 5 < noWebsite.length) await new Promise(r => setTimeout(r, 500));
+  }
+
+  return enriched;
 }
