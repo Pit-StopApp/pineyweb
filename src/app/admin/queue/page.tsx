@@ -30,6 +30,12 @@ export default function QueuePage() {
   };
 
   useEffect(() => {
+    if (!isRunning) return;
+    const interval = setInterval(() => { fetchQueueStats(); }, 5000);
+    return () => clearInterval(interval);
+  }, [isRunning]);
+
+  useEffect(() => {
     const init = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push("/login"); return; }
