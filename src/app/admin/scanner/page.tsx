@@ -48,8 +48,17 @@ export default function ScannerPage() {
     setScanning(true); setResults([]); setProgressPct(0);
     setStats({ raw: 0, chains_removed: 0, has_website: 0, zero_reviews_skipped: 0, already_in_crm: 0, new_prospects: 0, tier_1: 0, tier_2: 0 });
     const allResults: Result[] = [];
+    const seenIds = new Set<string>();
+    let dupeCount = 0;
+    const addResults = (results: Result[]) => {
+      for (const r of results) {
+        if (seenIds.has(r.place_id)) { dupeCount++; continue; }
+        seenIds.add(r.place_id);
+        allResults.push(r);
+      }
+    };
     let runningStats: Stats = { raw: 0, chains_removed: 0, has_website: 0, zero_reviews_skipped: 0, already_in_crm: 0, new_prospects: 0, tier_1: 0, tier_2: 0 };
-    const totalSteps = 9 + 6 + 1; // ~9 keyword batches + ~6 type batches + 1 AI
+    const totalSteps = 9 + 6 + 1;
     let step = 0;
 
     let batch = 0, done = false;
@@ -59,7 +68,7 @@ export default function ScannerPage() {
       try {
         const res = await fetch("/api/admin/scanner", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ city, state, batch, mode: "keywords" }) });
         const data = await res.json();
-        if (data.results) { allResults.push(...data.results); setResults([...allResults]); }
+        if (data.results) { addResults(data.results); setResults([...allResults]); }
         if (data.stats) { runningStats = mergeStats(runningStats, data.stats); setStats({ ...runningStats }); }
         done = data.done; batch = data.nextBatch ?? batch + 1;
       } catch { done = true; }
@@ -72,7 +81,7 @@ export default function ScannerPage() {
       try {
         const res = await fetch("/api/admin/scanner", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ city, state, batch, mode: "types" }) });
         const data = await res.json();
-        if (data.results) { allResults.push(...data.results); setResults([...allResults]); }
+        if (data.results) { addResults(data.results); setResults([...allResults]); }
         if (data.stats) { runningStats = mergeStats(runningStats, data.stats); setStats({ ...runningStats }); }
         done = data.done; batch = data.nextBatch ?? batch + 1;
       } catch { done = true; }
@@ -82,10 +91,11 @@ export default function ScannerPage() {
     try {
       const res = await fetch("/api/admin/scanner", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ city, state, mode: "ai" }) });
       const data = await res.json();
-      if (data.results) { allResults.push(...data.results); setResults([...allResults]); }
+      if (data.results) { addResults(data.results); setResults([...allResults]); }
       if (data.stats) { runningStats = mergeStats(runningStats, data.stats); setStats({ ...runningStats }); }
     } catch {}
 
+    console.log(`[Scanner] Deduped: ${dupeCount} duplicates removed (${allResults.length} unique from ${allResults.length + dupeCount} raw)`);
     setProgress(""); setProgressPct(100); setScanning(false);
   };
 

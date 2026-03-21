@@ -34,12 +34,26 @@ const PLACE_TYPES = [
 ];
 
 const CHAINS = new Set([
-  "McDonald's", "Subway", "Walmart", "Walgreens", "CVS", "Dollar General",
-  "Dollar Tree", "Family Dollar", "Domino's", "Pizza Hut", "KFC", "Taco Bell",
+  // Fast food
+  "McDonald's", "Subway", "Domino's", "Pizza Hut", "KFC", "Taco Bell",
   "Burger King", "Wendy's", "Chick-fil-A", "Sonic", "Whataburger", "Starbucks",
-  "Dunkin", "7-Eleven", "Circle K", "Shell", "Exxon", "Chevron", "Marathon",
-  "O'Reilly", "AutoZone", "NAPA", "Advance Auto", "H&R Block", "Edward Jones",
-  "State Farm", "Allstate", "RE/MAX", "Keller Williams", "Century 21",
+  "Dunkin", "Dairy Queen", "Jack in the Box", "Popeyes", "Raising Cane's",
+  "Wingstop", "Slim Chickens",
+  // Retail
+  "Walmart", "Walgreens", "CVS", "Dollar General", "Dollar Tree", "Family Dollar",
+  "7-Eleven", "Circle K", "Hobby Lobby", "Michaels", "Tuesday Morning",
+  "Burlington", "Ross", "TJ Maxx", "Marshalls", "Bealls",
+  // Gas/Auto
+  "Shell", "Exxon", "Chevron", "Marathon", "O'Reilly", "AutoZone", "NAPA",
+  "Advance Auto", "Christian Brothers", "Take 5 Oil Change", "Valvoline", "Mavis",
+  // Finance/Insurance
+  "H&R Block", "Edward Jones", "State Farm", "Allstate", "RE/MAX",
+  "Keller Williams", "Century 21", "Chase", "Wells Fargo", "Bank of America",
+  "Regions Bank", "Truist", "US Bank", "Citizens National Bank",
+  // Utilities
+  "AEP", "SWEPCO", "Oncor", "Entergy", "AT&T", "Spectrum", "Suddenlink", "CenterPoint",
+  // Medical chains
+  "DaVita", "Concentra", "AFC Urgent Care", "CareNow",
 ]);
 
 function isChain(name: string): boolean { return CHAINS.has(name.trim()); }
