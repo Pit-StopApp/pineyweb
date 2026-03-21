@@ -17,7 +17,7 @@ export default function ScannerPage() {
   const [progressPct, setProgressPct] = useState(0);
   const [results, setResults] = useState<Result[]>([]);
   const [stats, setStats] = useState<Stats>({ raw: 0, chains_removed: 0, has_website: 0, zero_reviews_skipped: 0, already_in_crm: 0, new_prospects: 0, tier_1: 0, tier_2: 0, emails_found: 0 });
-  const [saved, setSaved] = useState<Set<string>>(new Set());
+  // Prospects auto-saved by scanner API
   const [emailed, setEmailed] = useState<Set<string>>(new Set());
   const [bulkSending, setBulkSending] = useState(false);
   const [bulkProgress, setBulkProgress] = useState("");
@@ -97,11 +97,6 @@ export default function ScannerPage() {
 
     console.log(`[Scanner] Deduped: ${dupeCount} duplicates removed (${allResults.length} unique from ${allResults.length + dupeCount} raw)`);
     setProgress(""); setProgressPct(100); setScanning(false);
-  };
-
-  const saveProspect = async (r: Result) => {
-    await fetch("/api/admin/prospects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...r, email_source: r.email_source }) });
-    setSaved(prev => new Set(prev).add(r.place_id));
   };
 
   const sendEmail = async (r: Result) => {
@@ -249,7 +244,7 @@ export default function ScannerPage() {
               ★ TIER 1 — HIGH Priority
             </div>
             <div className="rounded-b-xl border border-t-0 overflow-hidden" style={{ backgroundColor: "#f8f3eb", borderColor: "rgba(193,201,191,0.2)" }}>
-              <ResultTable results={tier1} saved={saved} emailed={emailed} onSave={saveProspect} onEmail={sendEmail} />
+              <ResultTable results={tier1} emailed={emailed} onEmail={sendEmail} />
             </div>
           </div>
         )}
@@ -263,7 +258,7 @@ export default function ScannerPage() {
               TIER 2 — Standard
             </div>
             <div className="rounded-b-xl border border-t-0 overflow-hidden" style={{ backgroundColor: "#f8f3eb", borderColor: "rgba(193,201,191,0.2)" }}>
-              <ResultTable results={tier2} saved={saved} emailed={emailed} onSave={saveProspect} onEmail={sendEmail} />
+              <ResultTable results={tier2} emailed={emailed} onEmail={sendEmail} />
             </div>
           </div>
         )}
@@ -283,7 +278,7 @@ export default function ScannerPage() {
   );
 }
 
-function ResultTable({ results, saved, emailed, onSave, onEmail }: { results: Result[]; saved: Set<string>; emailed: Set<string>; onSave: (r: Result) => void; onEmail: (r: Result) => void }) {
+function ResultTable({ results, emailed, onEmail }: { results: Result[]; emailed: Set<string>; onEmail: (r: Result) => void }) {
   const [sortField, setSortField] = useState<"business_name" | "review_count" | "rating">("review_count");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -333,10 +328,8 @@ function ResultTable({ results, saved, emailed, onSave, onEmail }: { results: Re
             <td className="py-4 text-sm" style={{ color: "#414942" }}>{r.rating ? `⭐ ${r.rating}` : <span style={{ color: "#c1c9bf" }}>—</span>}</td>
             <td className="py-4 text-sm" style={{ color: "#717971" }}>{r.review_count ?? 0}</td>
             <td className="py-4 text-right pr-6">
-              <div className="flex gap-2 justify-end">
-                <button onClick={() => onSave(r)} disabled={saved.has(r.place_id)} className="px-3 py-1.5 rounded-md text-xs font-bold border transition-all disabled:opacity-40" style={saved.has(r.place_id) ? { backgroundColor: "rgba(193,201,191,0.2)", color: "#717971", borderColor: "transparent" } : { color: "#316342", borderColor: "#316342", backgroundColor: "transparent" }}>
-                  {saved.has(r.place_id) ? "Saved ✓" : "Save"}
-                </button>
+              <div className="flex gap-2 justify-end items-center">
+                <span className="text-[10px]" style={{ color: "#717971" }}>Saved ✓</span>
                 {emailed.has(r.place_id) ? (
                   <button disabled className="px-3 py-1.5 rounded-md text-xs font-bold" style={{ backgroundColor: "rgba(193,201,191,0.2)", color: "#717971" }}>Emailed ✓</button>
                 ) : !r.email ? (

@@ -325,5 +325,25 @@ async function checkWebsites(
     if (i + 5 < noWebsite.length) await new Promise(r => setTimeout(r, 500));
   }
 
+  // Auto-save ALL prospects to CRM (ignoreDuplicates preserves existing outreach status)
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+  for (const p of enriched) {
+    try {
+      await supabase.from("pineyweb_prospects").upsert({
+        place_id: p.place_id,
+        business_name: p.business_name,
+        address: p.address,
+        city: p.city,
+        phone: p.phone,
+        email: p.email ?? null,
+        email_source: p.email_source ?? null,
+        rating: p.rating,
+        review_count: p.review_count,
+        priority_tier: p.priority_tier,
+        outreach_status: "new",
+      }, { onConflict: "place_id", ignoreDuplicates: true });
+    } catch { /* non-blocking */ }
+  }
+
   return enriched;
 }

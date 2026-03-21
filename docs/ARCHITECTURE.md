@@ -102,7 +102,7 @@ Cold email outreach via Resend. Accepts single prospect or array (max 50). Uses 
 Accepts `{ prospect_ids: string[] }`. For each prospect with no email, uses Claude (claude-sonnet-4-20250514) with web search to find public business emails from Facebook, Yelp, BBB, Google Business, Instagram, Nextdoor, chamber of commerce directories. Runs in batches of 5 with 500ms delay. Updates pineyweb_prospects with email + email_source. Returns { enriched, failed, skipped, total }.
 
 ### Delivery-First CRM Flow
-1. Scanner finds prospects → saved to CRM via "Save to CRM"
+1. Scanner finds prospects → auto-saved to pineyweb_prospects (upsert with ignoreDuplicates to preserve existing outreach status)
 2. "Find Emails" on Prospects page enriches all prospects without emails
 3. "Send Cold Outreach" fires outreach API for all prospects with email + no emailed_at
 4. Outreach API sends via Resend with inline HTML
