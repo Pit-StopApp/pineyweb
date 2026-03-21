@@ -49,7 +49,12 @@ export async function POST(request: NextRequest) {
           .replace(/\{\{portfolioUrl\}\}/g, "https://pineyweb.com#work")
           .replace(/\{\{unsubscribeUrl\}\}/g, `https://pineyweb.com/unsubscribe?id=${prospect.place_id}`);
 
-        await resend.emails.send({
+        console.log("[Outreach] Sending to:", prospect.email);
+        console.log("[Outreach] From: Dustin Hartman <hello@pineyweb.com>");
+        console.log("[Outreach] Subject:", `${prospect.review_count} reviews and no website yet?`);
+        console.log("[Outreach] HTML length:", personalizedHtml.length);
+
+        const result = await resend.emails.send({
           from: "Dustin Hartman <hello@pineyweb.com>",
           to: prospect.email,
           subject: `${prospect.review_count} reviews and no website yet?`,
@@ -66,7 +71,15 @@ export async function POST(request: NextRequest) {
             { name: "review_count", value: String(prospect.review_count || 0) },
           ],
         });
-        sent++;
+
+        if (result.error) {
+          console.error("[Outreach] Resend error:", JSON.stringify(result.error));
+          errors.push(`${prospect.business_name}: ${JSON.stringify(result.error)}`);
+          failed++;
+        } else {
+          console.log("[Outreach] Sent successfully, id:", result.data?.id);
+          sent++;
+        }
       } catch (err) {
         errors.push(`${prospect.business_name}: ${err instanceof Error ? err.message : String(err)}`);
         failed++;
