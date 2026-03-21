@@ -22,7 +22,9 @@ The Piney Web Co. Outreach Scanner is an automated lead generation system that f
 | Service | Purpose | Auth |
 |---------|---------|------|
 | **Google Places API (New)** | Business discovery, geocoding, website detection | `X-Goog-Api-Key` header, `X-Goog-FieldMask` for field selection |
-| **Anthropic API** | Email enrichment via Claude claude-sonnet-4-20250514 with web search tool | `x-api-key` header, `anthropic-version: 2023-06-01` |
+| **Anthropic API** | AI reasoning pass for non-obvious business types | `x-api-key` header, `anthropic-version: 2023-06-01` |
+| **Apollo.io** | Email enrichment — people search + organization search | `X-Api-Key` header |
+| **Prospeo** | Email enrichment fallback — domain-based email search | `X-KEY` header |
 | **Resend** | Cold outreach email delivery + delivery/spam webhooks | `RESEND_API_KEY` |
 | **Supabase** | Prospect CRM storage, queue management, daily tracking | Service role key bypasses RLS |
 | **Next.js API Routes** | All scanner endpoints run as Vercel serverless functions | |
@@ -48,21 +50,35 @@ GET https://places.googleapis.com/v1/places/{placeId}
 - Details: `id,displayName,formattedAddress,nationalPhoneNumber,rating,userRatingCount,businessStatus,websiteUri,location,types`
 - Geocode fallback: `location`
 
-### Anthropic API — Email Enrichment
+### Apollo.io + Prospeo — Email Enrichment
 
-```
-POST https://api.anthropic.com/v1/messages
-  Headers: x-api-key, anthropic-version: 2023-06-01, Content-Type: application/json
-  Body: {
-    model: "claude-sonnet-4-6",
-    max_tokens: 500,
-    tools: [{ type: "web_search_20250305", name: "web_search" }],
-    system: "You are a business contact finder...",
-    messages: [{ role: "user", content: "Find the public contact email for: ..." }]
-  }
-```
+Three-step enrichment flow (defined in `src/lib/email-enrichment.ts`):
 
-Returns JSON: `{ "email": "found@email.com", "source": "Facebook" }` or `{ "email": null, "source": null }`
+**Step 1 — Apollo People Search:**
+```
+POST https://api.apollo.io/v1/mixed_people/search
+  Headers: X-Api-Key, Content-Type: application/json
+  Body: { q_organization_name, q_organization_city, q_organization_state_code: "TX", page: 1, per_page: 1 }
+```
+Returns person with email if found in Apollo's database.
+
+**Step 2 — Apollo Organization Search:**
+```
+POST https://api.apollo.io/v1/organizations/search
+  Headers: X-Api-Key, Content-Type: application/json
+  Body: { q_organization_name, q_organization_city, page: 1, per_page: 1 }
+```
+Returns organization with `primary_domain` if found.
+
+**Step 3 — Prospeo Domain Search (fallback):**
+```
+POST https://api.prospeo.io/domain-search
+  Headers: X-KEY, Content-Type: application/json
+  Body: { domain: "example.com", limit: 1 }
+```
+Uses the domain from Apollo org search to find a verified email via Prospeo.
+
+Returns: `{ email: "found@email.com", source: "Apollo" | "Prospeo" }` or `{ email: null, source: null }`
 
 ---
 
@@ -360,16 +376,13 @@ Exact name match against a hardcoded set of 78 chain businesses:
 
 ### Step 9: Email Enrichment
 
-For each prospect that passes all filters, Claude claude-sonnet-4-6 with web search looks for public business emails on:
-- Facebook page
-- Yelp listing
-- BBB profile
-- Google Business profile
-- Instagram bio
-- Nextdoor
-- Local chamber of commerce directories
+For each prospect that passes all filters, the enrichment module (`src/lib/email-enrichment.ts`) tries:
 
-Runs in parallel batches of 5 with 500ms delay. Returns `email` + `email_source` (e.g., "Facebook", "Yelp").
+1. **Apollo People Search** — searches Apollo's database for people at the organization by name + city
+2. **Apollo Organization Search** — if no person email found, looks up the organization to get its `primary_domain`
+3. **Prospeo Domain Search** — if a domain was found, queries Prospeo for verified emails on that domain
+
+Runs in parallel batches of 5 with 500ms delay. Returns `email` + `email_source` (either `"Apollo"` or `"Prospeo"`).
 
 ### Step 10: Auto-Save to CRM
 
@@ -564,7 +577,9 @@ NEXT_PUBLIC_SUPABASE_URL=       # Client's Supabase project
 NEXT_PUBLIC_SUPABASE_ANON_KEY=  # Client's anon key
 SUPABASE_SERVICE_ROLE_KEY=      # Client's service role key
 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY= # Google API key with Places API enabled
-ANTHROPIC_API_KEY=              # Anthropic API key for enrichment
+ANTHROPIC_API_KEY=              # Anthropic API key for AI reasoning pass
+APOLLO_API_KEY=                 # Apollo.io API key for email enrichment
+PROSPEO_API_KEY=                # Prospeo API key for domain email search
 RESEND_API_KEY=                 # Resend API key
 RESEND_WEBHOOK_SECRET_PINEYWEB= # Svix webhook secret from Resend
 CRON_SECRET=                    # Shared secret for cron auth
@@ -594,14 +609,14 @@ Run all migrations in `supabase/migrations/` numbered 015-020:
 | Place Details (Basic) | $0.017 per request | ~30-80 detail lookups = $0.51-$1.36 |
 | **Total per city** | | **~$2.79-$3.64** |
 
-### Anthropic API — Email Enrichment
+### Apollo.io + Prospeo — Email Enrichment
 
-| Operation | Cost | Notes |
-|-----------|------|-------|
-| Claude claude-sonnet-4-20250514 input | $3/M tokens | ~500 tokens per enrichment |
-| Claude claude-sonnet-4-20250514 output | $15/M tokens | ~200 tokens per enrichment |
-| Web search tool | included | No additional charge |
-| **Per prospect** | | **~$0.005-$0.01** |
+| Service | Cost | Notes |
+|---------|------|-------|
+| Apollo People Search | Free tier: 10,000 credits/mo | 1 credit per search |
+| Apollo Org Search | Free tier: included | 1 credit per search |
+| Prospeo Domain Search | ~$0.01 per search | Only called when Apollo finds a domain but no direct email |
+| **Per prospect** | | **~$0.00-$0.01** (free via Apollo, $0.01 if Prospeo fallback used) |
 
 ### Resend
 
@@ -613,11 +628,11 @@ Run all migrations in `supabase/migrations/` numbered 015-020:
 
 ### Estimated Monthly Cost by Tier
 
-| Tier | Emails/day | Cities/mo | Google Places | Anthropic | Resend | Total |
-|------|-----------|-----------|---------------|-----------|--------|-------|
-| Starter (25/day) | 750/mo | ~15-20 | ~$55-$73 | ~$5-$10 | Free | **~$60-$83/mo** |
-| Growth (50/day) | 1,500/mo | ~30-40 | ~$110-$146 | ~$10-$20 | $20 | **~$140-$186/mo** |
-| Agency (100/day) | 3,000/mo | ~60-80 | ~$220-$291 | ~$20-$40 | $20 | **~$260-$351/mo** |
+| Tier | Emails/day | Cities/mo | Google Places | Enrichment | Resend | Total |
+|------|-----------|-----------|---------------|------------|--------|-------|
+| Starter (25/day) | 750/mo | ~15-20 | ~$55-$73 | ~$0-$5 | Free | **~$55-$78/mo** |
+| Growth (50/day) | 1,500/mo | ~30-40 | ~$110-$146 | ~$0-$10 | $20 | **~$130-$176/mo** |
+| Agency (100/day) | 3,000/mo | ~60-80 | ~$220-$291 | ~$0-$20 | $20 | **~$240-$331/mo** |
 
 ---
 
@@ -651,6 +666,7 @@ Chain exclusion uses exact name matching. Variations like "McDonald's Restaurant
 
 ### Rate Limits
 - Google Places API: 600 requests per minute (default)
-- Anthropic API: varies by tier
+- Apollo.io: 10,000 credits/mo on free tier, rate limited per minute
+- Prospeo: rate limited per plan
 - Resend: 10 emails per second on free tier
 - Scanner enforces 200ms delay between outreach emails and 500ms between enrichment batches

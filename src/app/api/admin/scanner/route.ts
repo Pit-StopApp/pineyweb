@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { findBusinessEmail } from "@/lib/email-enrichment";
 
 function getSupabase() { return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!); }
 
@@ -247,29 +248,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function findBusinessEmail(businessName: string, address: string, city: string): Promise<{ email: string | null; source: string | null }> {
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  if (!anthropicKey) return { email: null, source: null };
-  try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": anthropicKey, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6", max_tokens: 500,
-        tools: [{ type: "web_search_20250305", name: "web_search" }],
-        system: `You are a business contact finder. Search for the public email address of the business provided. Check their Facebook page, Yelp listing, BBB profile, Google Business profile, Instagram bio, and any other public listings. Return ONLY a valid JSON object with no markdown, no explanation: {"email": "found@email.com", "source": "Facebook"} or {"email": null, "source": null} if not found. Never guess or fabricate an email address.`,
-        messages: [{ role: "user", content: `Find the public contact email for: ${businessName}, located at ${address}, ${city}, TX` }],
-      }),
-    });
-    const data = await res.json();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const text = (data.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
-    const clean = text.replace(/```json|```/g, "").trim();
-    return JSON.parse(clean);
-  } catch { return { email: null, source: null }; }
-}
-
 async function checkWebsites(
   rawResults: { place_id: string; name: string }[],
   apiKey: string,
@@ -316,7 +294,7 @@ async function checkWebsites(
     const batch = noWebsite.slice(i, i + 5);
     const results = await Promise.all(
       batch.map(async (p) => {
-        const { email, source } = await findBusinessEmail(p.business_name, p.address, p.city);
+        const { email, source } = await findBusinessEmail(p.business_name, p.address, p.city, p.phone);
         if (email) stats.emails_found++;
         return { ...p, email, email_source: source };
       })
