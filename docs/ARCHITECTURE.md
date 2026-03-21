@@ -89,7 +89,13 @@ Validates confirmation number, activates client account, sends AccountActivated 
 ### POST /api/admin/send-email
 Admin-only. Sends BuildStarted or SiteLive email to a client. Verifies admin role. Updates client status.
 
+### POST /api/admin/outreach
+Cold email outreach via Resend. Accepts single prospect or array (max 50). Uses template `c61d6c30-11af-4c99-b9ef-2e6c74af25ea` with variables: firstName, businessName, reviewCount, portfolioUrl, unsubscribeUrl. 200ms delay between sends. Updates prospect status to 'contacted' and sets emailed_at. Returns { sent, failed, errors }.
+
 ## Pages
+
+### Public (continued)
+- `/unsubscribe` — Accepts `?id=` param, marks prospect as closed_lost with note "Unsubscribed from cold outreach"
 
 ### Public
 - `/` — Landing page

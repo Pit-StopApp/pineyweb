@@ -18,6 +18,10 @@ export default function ScannerPage() {
   const [results, setResults] = useState<Result[]>([]);
   const [stats, setStats] = useState<Stats>({ raw: 0, chains_removed: 0, has_website: 0, zero_reviews_skipped: 0, already_in_crm: 0, new_prospects: 0, tier_1: 0, tier_2: 0 });
   const [saved, setSaved] = useState<Set<string>>(new Set());
+  const [emailed, setEmailed] = useState<Set<string>>(new Set());
+  const [bulkSending, setBulkSending] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState("");
+  const [showBulkConfirm, setShowBulkConfirm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [adminName, setAdminName] = useState("Admin");
 
@@ -88,6 +92,38 @@ export default function ScannerPage() {
   const saveProspect = async (r: Result) => {
     await fetch("/api/admin/prospects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(r) });
     setSaved(prev => new Set(prev).add(r.place_id));
+  };
+
+  const sendEmail = async (r: Result) => {
+    if (!r.phone) return; // phone used as proxy for having contact info
+    // Save first if not already saved
+    if (!saved.has(r.place_id)) await saveProspect(r);
+    await fetch("/api/admin/outreach", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: r.place_id, business_name: r.business_name, email: r.phone, review_count: r.review_count }) });
+    setEmailed(prev => new Set(prev).add(r.place_id));
+  };
+
+  const bulkSendTier1 = async () => {
+    setShowBulkConfirm(false);
+    setBulkSending(true);
+    const tier1Items = results.filter(r => r.priority_tier === 1 && !emailed.has(r.place_id));
+    const batches: Result[][] = [];
+    for (let i = 0; i < tier1Items.length; i += 50) batches.push(tier1Items.slice(i, i + 50));
+
+    let totalSent = 0;
+    for (let b = 0; b < batches.length; b++) {
+      setBulkProgress(`Sending batch ${b + 1} of ${batches.length}... (${totalSent} of ${tier1Items.length})`);
+      // Save all in batch first
+      for (const r of batches[b]) { if (!saved.has(r.place_id)) await saveProspect(r); }
+      // Send emails
+      const prospects = batches[b].map(r => ({ id: r.place_id, business_name: r.business_name, email: r.phone || "", review_count: r.review_count || 0 }));
+      const res = await fetch("/api/admin/outreach", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prospects }) });
+      const data = await res.json();
+      totalSent += data.sent || 0;
+      for (const r of batches[b]) setEmailed(prev => new Set(prev).add(r.place_id));
+    }
+    setBulkProgress(`${totalSent} emails sent successfully`);
+    setBulkSending(false);
+    setTimeout(() => setBulkProgress(""), 5000);
   };
 
   const handleLogout = async () => { await supabase.auth.signOut(); router.push("/login"); };
@@ -175,11 +211,32 @@ export default function ScannerPage() {
         {/* Tier 1 Results */}
         {tier1.length > 0 && (
           <div className="mb-12">
-            <div className="py-3 px-6 rounded-t-xl text-[11px] font-bold uppercase tracking-widest" style={{ backgroundColor: "#fdc39a", color: "#794e2e" }}>
-              ★ TIER 1 — HIGH Priority
+            <div className="py-3 px-6 rounded-t-xl flex items-center justify-between" style={{ backgroundColor: "#fdc39a" }}>
+              <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "#794e2e" }}>★ TIER 1 — HIGH Priority</span>
+              <div className="flex items-center gap-3">
+                {bulkProgress && <span className="text-xs italic" style={{ color: "#794e2e" }}>{bulkProgress}</span>}
+                <button onClick={() => setShowBulkConfirm(true)} disabled={bulkSending} className="px-4 py-1.5 rounded-md text-xs font-bold text-white disabled:opacity-50" style={{ backgroundColor: "#316342" }}>
+                  {bulkSending ? "Sending..." : `Send to ${tier1.filter(r => !emailed.has(r.place_id)).length} Tier 1`}
+                </button>
+              </div>
             </div>
             <div className="rounded-b-xl border border-t-0 overflow-hidden" style={{ backgroundColor: "#f8f3eb", borderColor: "rgba(193,201,191,0.2)" }}>
-              <ResultTable results={tier1} saved={saved} onSave={saveProspect} />
+              <ResultTable results={tier1} saved={saved} emailed={emailed} onSave={saveProspect} onEmail={sendEmail} />
+            </div>
+          </div>
+        )}
+
+        {/* Bulk Confirm Modal */}
+        {showBulkConfirm && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+            <div className="w-full max-w-md p-8 rounded-xl" style={{ backgroundColor: "#F5F0E8" }}>
+              <h3 className="text-xl font-bold mb-4" style={{ color: "#1d1c17" }}>Confirm Bulk Send</h3>
+              <p className="text-sm mb-2" style={{ color: "#414942" }}>You&apos;re about to send <strong>{tier1.filter(r => !emailed.has(r.place_id)).length}</strong> cold emails. This cannot be undone.</p>
+              {tier1.filter(r => !emailed.has(r.place_id)).length > 50 && <p className="text-xs mb-4 italic" style={{ color: "#805533" }}>Sending in {Math.ceil(tier1.filter(r => !emailed.has(r.place_id)).length / 50)} batches due to rate limits</p>}
+              <div className="flex gap-3 mt-6">
+                <button onClick={bulkSendTier1} className="flex-1 py-3 rounded-md text-sm font-bold text-white" style={{ backgroundColor: "#316342" }}>Proceed</button>
+                <button onClick={() => setShowBulkConfirm(false)} className="px-6 py-3 rounded-md text-sm font-bold border" style={{ color: "#414942", borderColor: "#c1c9bf" }}>Cancel</button>
+              </div>
             </div>
           </div>
         )}
@@ -191,7 +248,7 @@ export default function ScannerPage() {
               TIER 2 — Standard
             </div>
             <div className="rounded-b-xl border border-t-0 overflow-hidden" style={{ backgroundColor: "#f8f3eb", borderColor: "rgba(193,201,191,0.2)" }}>
-              <ResultTable results={tier2} saved={saved} onSave={saveProspect} />
+              <ResultTable results={tier2} saved={saved} emailed={emailed} onSave={saveProspect} onEmail={sendEmail} />
             </div>
           </div>
         )}
@@ -211,7 +268,7 @@ export default function ScannerPage() {
   );
 }
 
-function ResultTable({ results, saved, onSave }: { results: Result[]; saved: Set<string>; onSave: (r: Result) => void }) {
+function ResultTable({ results, saved, emailed, onSave, onEmail }: { results: Result[]; saved: Set<string>; emailed: Set<string>; onSave: (r: Result) => void; onEmail: (r: Result) => void }) {
   return (
     <table className="w-full text-left">
       <thead>
@@ -237,9 +294,18 @@ function ResultTable({ results, saved, onSave }: { results: Result[]; saved: Set
               {r.rating ? <span>⭐ {r.rating}</span> : null} <span style={{ color: "#717971" }}>({r.review_count ?? 0})</span>
             </td>
             <td className="py-4 text-right pr-6">
-              <button onClick={() => onSave(r)} disabled={saved.has(r.place_id)} className="px-4 py-1.5 rounded-md text-xs font-bold border transition-all disabled:opacity-40" style={saved.has(r.place_id) ? { backgroundColor: "rgba(193,201,191,0.2)", color: "#717971", borderColor: "transparent" } : { color: "#316342", borderColor: "#316342", backgroundColor: "transparent" }}>
-                {saved.has(r.place_id) ? "Saved ✓" : "Save to CRM"}
-              </button>
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => onSave(r)} disabled={saved.has(r.place_id)} className="px-3 py-1.5 rounded-md text-xs font-bold border transition-all disabled:opacity-40" style={saved.has(r.place_id) ? { backgroundColor: "rgba(193,201,191,0.2)", color: "#717971", borderColor: "transparent" } : { color: "#316342", borderColor: "#316342", backgroundColor: "transparent" }}>
+                  {saved.has(r.place_id) ? "Saved ✓" : "Save"}
+                </button>
+                {emailed.has(r.place_id) ? (
+                  <button disabled className="px-3 py-1.5 rounded-md text-xs font-bold" style={{ backgroundColor: "rgba(193,201,191,0.2)", color: "#717971" }}>Emailed ✓</button>
+                ) : !r.phone ? (
+                  <button disabled className="px-3 py-1.5 rounded-md text-xs font-bold" style={{ backgroundColor: "rgba(193,201,191,0.1)", color: "#c1c9bf" }}>No Email</button>
+                ) : (
+                  <button onClick={() => onEmail(r)} className="px-3 py-1.5 rounded-md text-xs font-bold border transition-all" style={{ color: "#805533", borderColor: "#805533", backgroundColor: "transparent" }}>Send Email</button>
+                )}
+              </div>
             </td>
           </tr>
         ))}
