@@ -80,6 +80,12 @@ Handles three Stripe events:
 - **invoice.paid** — Creates order from invoice line items, generates confirmation number, sends OrderConfirmation email. Sets `stripe_customer_id` on the matching `pineyweb_clients` row (by email) so the billing page can fetch Stripe data. If managed tier detected, creates a $99/mo subscription with 30-day trial (starts 30 days after invoice payment).
 - **invoice.payment_failed** — Sends payment failed email to client (with billing portal link) and alert to admin (with client details and attempt count). After 3 failed attempts, sets client status to `suspended` and `suspended_at` to current timestamp. Suspended clients are redirected to `/dashboard/suspended` with a payment update CTA.
 
+### POST /api/webhooks/resend
+Resend webhook handler with svix signature verification (`RESEND_WEBHOOK_SECRET_PINEYWEB`). Listens for:
+- **email.delivered** — Sets `email_delivered: true` on matching prospect by email
+- **email.complained** — Sets `email_spam: true` on matching prospect by email
+Prospects CRM shows ✅ for delivered, ⚠️ for spam complaints next to status badge.
+
 ### GET /api/cron/payment-check
 Daily cron job (9am UTC via Vercel Cron). Finds clients suspended exactly 10 days ago (by `suspended_at`). Sends admin alert email for each, noting per Terms of Service they may now consider permanent termination. Secured by `CRON_SECRET` Bearer token.
 

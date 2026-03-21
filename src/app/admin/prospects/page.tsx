@@ -8,7 +8,7 @@ import Link from "next/link";
 interface Prospect {
   id: string; place_id: string; business_name: string; city: string; phone: string | null;
   priority_tier: number; outreach_status: string; follow_up_date: string | null; notes: string | null;
-  contact_method: string | null; rating: number | null; review_count: number | null; created_at: string; updated_at: string;
+  contact_method: string | null; rating: number | null; review_count: number | null; email_delivered: boolean; email_spam: boolean; created_at: string; updated_at: string;
 }
 
 const STATUSES = ["new", "contacted", "follow_up", "closed_won", "closed_lost"];
@@ -145,11 +145,13 @@ export default function ProspectsPage() {
                         <div className="py-4 w-20">
                           <span className="px-2.5 py-1 rounded-full text-[10px] font-bold" style={p.priority_tier === 1 ? { backgroundColor: "rgba(253,195,154,0.4)", color: "#794e2e" } : { backgroundColor: "rgba(193,201,191,0.3)", color: "#717971" }}>T{p.priority_tier}</span>
                         </div>
-                        <div className="py-4 w-28">
+                        <div className="py-4 w-32 flex items-center gap-2">
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase" style={{ backgroundColor: st.bg, color: st.color }}>
                             {st.dot && <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: st.dot }} />}
                             {STATUS_LABELS[p.outreach_status] || p.outreach_status}
                           </span>
+                          {p.email_spam && <span title="Marked as spam" style={{ fontSize: "14px" }}>⚠️</span>}
+                          {p.email_delivered && !p.email_spam && <span title="Email delivered" style={{ fontSize: "14px" }}>✅</span>}
                         </div>
                         <div className="py-4 w-28 text-sm" style={{ color: "#414942" }}>{p.follow_up_date || "—"}</div>
                         <div className="py-4 w-32 text-right pr-6">
