@@ -269,20 +269,39 @@ export default function ScannerPage() {
 }
 
 function ResultTable({ results, saved, emailed, onSave, onEmail }: { results: Result[]; saved: Set<string>; emailed: Set<string>; onSave: (r: Result) => void; onEmail: (r: Result) => void }) {
+  const [sortField, setSortField] = useState<"business_name" | "review_count" | "rating">("review_count");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const toggleSort = (field: typeof sortField) => {
+    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortField(field); setSortDir("desc"); }
+  };
+  const arrow = (field: typeof sortField) => sortField === field ? (sortDir === "asc" ? " ↑" : " ↓") : "";
+  const thStyle = (field: typeof sortField) => ({ color: sortField === field ? "#316342" : "#414942", cursor: "pointer" as const });
+
+  const sorted = [...results].sort((a, b) => {
+    const m = sortDir === "asc" ? 1 : -1;
+    if (sortField === "business_name") return ((a.business_name || "") > (b.business_name || "") ? 1 : -1) * m;
+    if (sortField === "review_count") return ((a.review_count || 0) - (b.review_count || 0)) * m;
+    if (sortField === "rating") return ((a.rating || 0) - (b.rating || 0)) * m;
+    return 0;
+  });
+
   return (
     <table className="w-full text-left">
       <thead>
-        <tr className="text-[11px] uppercase tracking-[0.12em] font-bold border-b" style={{ color: "#414942", borderColor: "rgba(193,201,191,0.15)" }}>
-          <th className="py-3 pl-6 w-16">Priority</th>
-          <th className="py-3">Business Name</th>
-          <th className="py-3">Address</th>
-          <th className="py-3">Phone</th>
-          <th className="py-3">Reviews</th>
-          <th className="py-3 text-right pr-6">Actions</th>
+        <tr className="text-[11px] uppercase tracking-[0.12em] font-bold border-b" style={{ borderColor: "rgba(193,201,191,0.15)" }}>
+          <th className="py-3 pl-6 w-16" style={{ color: "#414942" }}>Priority</th>
+          <th className="py-3" style={thStyle("business_name")} onClick={() => toggleSort("business_name")}>Business Name{arrow("business_name")}</th>
+          <th className="py-3" style={{ color: "#414942" }}>Address</th>
+          <th className="py-3" style={{ color: "#414942" }}>Phone</th>
+          <th className="py-3" style={thStyle("rating")} onClick={() => toggleSort("rating")}>Rating{arrow("rating")}</th>
+          <th className="py-3" style={thStyle("review_count")} onClick={() => toggleSort("review_count")}>Reviews{arrow("review_count")}</th>
+          <th className="py-3 text-right pr-6" style={{ color: "#414942" }}>Actions</th>
         </tr>
       </thead>
       <tbody>
-        {results.map(r => (
+        {sorted.map(r => (
           <tr key={r.place_id} className="border-b transition-colors hover:bg-[#f2ede5]" style={{ borderColor: "rgba(193,201,191,0.08)" }}>
             <td className="py-4 pl-6">
               <span className="px-2.5 py-1 rounded-full text-[10px] font-bold" style={r.priority_tier === 1 ? { backgroundColor: "rgba(253,195,154,0.4)", color: "#794e2e" } : { backgroundColor: "rgba(193,201,191,0.3)", color: "#717971" }}>T{r.priority_tier}</span>
@@ -290,9 +309,8 @@ function ResultTable({ results, saved, emailed, onSave, onEmail }: { results: Re
             <td className="py-4 font-semibold" style={{ color: "#1d1c17" }}>{r.business_name}</td>
             <td className="py-4 text-sm" style={{ color: "#414942" }}>{r.address}</td>
             <td className="py-4 text-sm">{r.phone ? <a href={`tel:${r.phone}`} className="underline underline-offset-4" style={{ color: "#316342" }}>{r.phone}</a> : <span style={{ color: "#c1c9bf" }}>—</span>}</td>
-            <td className="py-4 text-sm" style={{ color: "#414942" }}>
-              {r.rating ? <span>⭐ {r.rating}</span> : null} <span style={{ color: "#717971" }}>({r.review_count ?? 0})</span>
-            </td>
+            <td className="py-4 text-sm" style={{ color: "#414942" }}>{r.rating ? `⭐ ${r.rating}` : <span style={{ color: "#c1c9bf" }}>—</span>}</td>
+            <td className="py-4 text-sm" style={{ color: "#717971" }}>{r.review_count ?? 0}</td>
             <td className="py-4 text-right pr-6">
               <div className="flex gap-2 justify-end">
                 <button onClick={() => onSave(r)} disabled={saved.has(r.place_id)} className="px-3 py-1.5 rounded-md text-xs font-bold border transition-all disabled:opacity-40" style={saved.has(r.place_id) ? { backgroundColor: "rgba(193,201,191,0.2)", color: "#717971", borderColor: "transparent" } : { color: "#316342", borderColor: "#316342", backgroundColor: "transparent" }}>
