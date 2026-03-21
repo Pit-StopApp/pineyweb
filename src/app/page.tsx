@@ -482,11 +482,11 @@ function OutreachScanner() {
 
           <div className="text-center">
             <a
-              href="mailto:hello@pineyweb.com?subject=Outreach Scanner Inquiry"
+              href="#contact"
               className="inline-flex items-center justify-center px-8 py-3.5 rounded-full text-white font-medium hover:opacity-90 transition-opacity text-base"
               style={{ backgroundColor: "#4A7C59" }}
             >
-              Schedule a Free Consultation
+              Get Started
             </a>
           </div>
         </div>
