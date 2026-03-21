@@ -66,7 +66,6 @@ export default function QueuePage() {
     const token = session?.access_token || "";
 
     let citiesScanned = 0;
-    let totalEmailsSent = 0;
     const allResults: { city: string; prospects: number; emails_found: number; emails_sent: number }[] = [];
     const MAX_ITERATIONS = 50;
 
@@ -91,7 +90,6 @@ export default function QueuePage() {
       }
 
       citiesScanned++;
-      totalEmailsSent += data.emails_sent ?? 0;
       setCurrentCity(data.current_city ?? "");
       allResults.push({
         city: data.current_city,
