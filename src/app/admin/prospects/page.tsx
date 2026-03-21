@@ -66,37 +66,47 @@ export default function ProspectsPage() {
 
   const handleLogout = async () => { await supabase.auth.signOut(); router.push("/login"); };
 
-  const noEmailIds = prospects.filter(p => !p.email).map(p => p.id);
-  const readyToSend = prospects.filter(p => p.email && !p.emailed_at);
+  // Counts from current loaded prospects (may be filtered)
+  const noEmailCount = prospects.filter(p => !p.email).length;
+  const readyToSendCount = prospects.filter(p => p.email && !p.emailed_at).length;
 
   const runEnrichment = async () => {
-    if (noEmailIds.length === 0) return;
-    setEnriching(true); setEnrichProgress("Starting enrichment...");
+    setEnriching(true); setEnrichProgress("Fetching all prospects...");
+    // Fetch ALL prospect IDs with null email from DB — not just current page
+    const { data: allNoEmail } = await supabase.from("pineyweb_prospects").select("id").is("email", null);
+    const allIds = (allNoEmail || []).map((p: { id: string }) => p.id);
+    if (allIds.length === 0) { setEnriching(false); setEnrichProgress("All prospects already have emails"); setTimeout(() => setEnrichProgress(""), 3000); return; }
+
     const BATCH = 20;
     let totalEnriched = 0;
-    for (let i = 0; i < noEmailIds.length; i += BATCH) {
-      const batch = noEmailIds.slice(i, i + BATCH);
-      setEnrichProgress(`Enriching... ${i} of ${noEmailIds.length}`);
+    for (let i = 0; i < allIds.length; i += BATCH) {
+      const batch = allIds.slice(i, i + BATCH);
+      setEnrichProgress(`Enriching... ${Math.min(i + BATCH, allIds.length)} of ${allIds.length}`);
       try {
         const res = await fetch("/api/admin/enrich", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prospect_ids: batch }) });
         const data = await res.json();
         totalEnriched += data.enriched || 0;
       } catch { /* continue */ }
     }
-    setEnrichProgress(`Found ${totalEnriched} emails out of ${noEmailIds.length} prospects`);
+    setEnrichProgress(`Found ${totalEnriched} emails out of ${allIds.length} prospects`);
     setEnriching(false);
     await loadProspects(filter);
     setTimeout(() => setEnrichProgress(""), 5000);
   };
 
   const runBulkSend = async () => {
-    setShowSendConfirm(false); setSending(true);
-    const toSend = readyToSend.map(p => ({ place_id: p.place_id, business_name: p.business_name, email: p.email!, email_source: p.email_source, address: "", city: p.city || "", phone: p.phone, rating: p.rating, review_count: p.review_count || 0, priority_tier: p.priority_tier }));
+    setShowSendConfirm(false); setSending(true); setSendProgress("Fetching all ready prospects...");
+    // Fetch ALL prospects with email + no emailed_at from DB
+    const { data: allReady } = await supabase.from("pineyweb_prospects").select("id, place_id, business_name, email, email_source, city, phone, rating, review_count, priority_tier").not("email", "is", null).is("emailed_at", null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const toSend = (allReady || []).map((p: any) => ({ place_id: p.place_id, business_name: p.business_name, email: p.email, email_source: p.email_source, address: "", city: p.city || "", phone: p.phone, rating: p.rating, review_count: p.review_count || 0, priority_tier: p.priority_tier }));
+    if (toSend.length === 0) { setSending(false); setSendProgress("No prospects ready to send"); setTimeout(() => setSendProgress(""), 3000); return; }
+
     const BATCH = 50;
     let totalSent = 0;
     for (let i = 0; i < toSend.length; i += BATCH) {
       const batch = toSend.slice(i, i + BATCH);
-      setSendProgress(`Sending... ${totalSent} of ${toSend.length}`);
+      setSendProgress(`Sending... ${Math.min(i + BATCH, toSend.length)} of ${toSend.length}`);
       try {
         const res = await fetch("/api/admin/outreach", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prospects: batch }) });
         const data = await res.json();
@@ -156,11 +166,11 @@ export default function ProspectsPage() {
 
         {/* Enrichment + Bulk Send */}
         <div className="flex items-center gap-4 mb-6 flex-wrap">
-          <button onClick={runEnrichment} disabled={enriching || noEmailIds.length === 0} className="px-5 py-2.5 rounded-md text-sm font-bold border transition-all disabled:opacity-40" style={{ color: "#316342", borderColor: "#316342" }}>
-            {enriching ? "Enriching..." : noEmailIds.length === 0 ? "All Enriched" : `Find Emails (${noEmailIds.length})`}
+          <button onClick={runEnrichment} disabled={enriching || noEmailCount === 0} className="px-5 py-2.5 rounded-md text-sm font-bold border transition-all disabled:opacity-40" style={{ color: "#316342", borderColor: "#316342" }}>
+            {enriching ? "Enriching..." : noEmailCount === 0 ? "All Enriched" : `Find Emails (${noEmailCount})`}
           </button>
-          <button onClick={() => setShowSendConfirm(true)} disabled={sending || readyToSend.length === 0} className="px-5 py-2.5 rounded-md text-sm font-bold text-white transition-all disabled:opacity-40" style={{ backgroundColor: "#316342" }}>
-            {sending ? "Sending..." : readyToSend.length === 0 ? "No Emails Ready" : `Send Cold Outreach (${readyToSend.length})`}
+          <button onClick={() => setShowSendConfirm(true)} disabled={sending || readyToSendCount === 0} className="px-5 py-2.5 rounded-md text-sm font-bold text-white transition-all disabled:opacity-40" style={{ backgroundColor: "#316342" }}>
+            {sending ? "Sending..." : readyToSendCount === 0 ? "No Emails Ready" : `Send Cold Outreach (${readyToSendCount})`}
           </button>
           {enrichProgress && <span className="text-sm italic" style={{ color: "#316342" }}>{enrichProgress}</span>}
           {sendProgress && <span className="text-sm italic" style={{ color: "#316342" }}>{sendProgress}</span>}
@@ -171,7 +181,7 @@ export default function ProspectsPage() {
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
             <div className="w-full max-w-md p-8 rounded-xl" style={{ backgroundColor: "#F5F0E8" }}>
               <h3 className="text-xl font-bold mb-4" style={{ color: "#1d1c17" }}>Confirm Send</h3>
-              <p className="text-sm mb-2" style={{ color: "#414942" }}>You&apos;re about to send <strong>{readyToSend.length}</strong> cold emails. Prospects who have already been emailed will be skipped automatically. Proceed?</p>
+              <p className="text-sm mb-2" style={{ color: "#414942" }}>You&apos;re about to send cold emails to all prospects with an email address who haven&apos;t been emailed yet. Already-emailed prospects will be skipped. Proceed?</p>
               <div className="flex gap-3 mt-6">
                 <button onClick={runBulkSend} className="flex-1 py-3 rounded-md text-sm font-bold text-white" style={{ backgroundColor: "#316342" }}>Proceed</button>
                 <button onClick={() => setShowSendConfirm(false)} className="px-6 py-3 rounded-md text-sm font-bold border" style={{ color: "#414942", borderColor: "#c1c9bf" }}>Cancel</button>
