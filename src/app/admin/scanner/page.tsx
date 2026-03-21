@@ -106,25 +106,21 @@ export default function ScannerPage() {
 
   const sendEmail = async (r: Result) => {
     if (!r.email) return;
-    if (!saved.has(r.place_id)) await saveProspect(r);
-    await fetch("/api/admin/outreach", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: r.place_id, business_name: r.business_name, email: r.email, review_count: r.review_count }) });
+    await fetch("/api/admin/outreach", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ place_id: r.place_id, business_name: r.business_name, email: r.email, email_source: r.email_source, address: r.address, city: r.city, phone: r.phone, rating: r.rating, review_count: r.review_count || 0, priority_tier: r.priority_tier }) });
     setEmailed(prev => new Set(prev).add(r.place_id));
   };
 
-  const bulkSendTier1 = async () => {
+  const bulkSendAll = async () => {
     setShowBulkConfirm(false);
     setBulkSending(true);
-    const tier1Items = results.filter(r => r.priority_tier === 1 && r.email && !emailed.has(r.place_id));
+    const emailable = results.filter(r => r.email && !emailed.has(r.place_id));
     const batches: Result[][] = [];
-    for (let i = 0; i < tier1Items.length; i += 50) batches.push(tier1Items.slice(i, i + 50));
+    for (let i = 0; i < emailable.length; i += 50) batches.push(emailable.slice(i, i + 50));
 
     let totalSent = 0;
     for (let b = 0; b < batches.length; b++) {
-      setBulkProgress(`Sending batch ${b + 1} of ${batches.length}... (${totalSent} of ${tier1Items.length})`);
-      // Save all in batch first
-      for (const r of batches[b]) { if (!saved.has(r.place_id)) await saveProspect(r); }
-      // Send emails
-      const prospects = batches[b].filter(r => r.email).map(r => ({ id: r.place_id, business_name: r.business_name, email: r.email || "", review_count: r.review_count || 0 }));
+      setBulkProgress(`Sending... ${totalSent} of ${emailable.length}`);
+      const prospects = batches[b].map(r => ({ place_id: r.place_id, business_name: r.business_name, email: r.email || "", email_source: r.email_source || null, address: r.address, city: r.city, phone: r.phone, rating: r.rating, review_count: r.review_count || 0, priority_tier: r.priority_tier }));
       const res = await fetch("/api/admin/outreach", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prospects }) });
       const data = await res.json();
       totalSent += data.sent || 0;
@@ -218,19 +214,39 @@ export default function ScannerPage() {
           </div>
         )}
 
+        {/* Send All Emails Button */}
+        {results.length > 0 && (() => {
+          const emailCount = results.filter(r => r.email && !emailed.has(r.place_id)).length;
+          return (
+            <div className="flex items-center justify-center gap-4 mb-12">
+              {bulkProgress && <span className="text-sm italic" style={{ color: "#316342" }}>{bulkProgress}</span>}
+              <button onClick={() => setShowBulkConfirm(true)} disabled={bulkSending || emailCount === 0} className="px-8 py-3 rounded-md font-bold text-white text-sm disabled:opacity-50 transition-all active:scale-95" style={{ backgroundColor: "#316342" }}>
+                {bulkSending ? "Sending..." : emailCount === 0 ? "No Emails Found" : `Send All Emails (${emailCount})`}
+              </button>
+            </div>
+          );
+        })()}
+
+        {/* Bulk Confirm Modal */}
+        {showBulkConfirm && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+            <div className="w-full max-w-md p-8 rounded-xl" style={{ backgroundColor: "#F5F0E8" }}>
+              <h3 className="text-xl font-bold mb-4" style={{ color: "#1d1c17" }}>Confirm Send</h3>
+              <p className="text-sm mb-2" style={{ color: "#414942" }}>You&apos;re about to send <strong>{results.filter(r => r.email && !emailed.has(r.place_id)).length}</strong> cold emails to businesses with no website. Proceed?</p>
+              {results.filter(r => r.email && !emailed.has(r.place_id)).length > 50 && <p className="text-xs mb-4 italic" style={{ color: "#805533" }}>Sending in {Math.ceil(results.filter(r => r.email && !emailed.has(r.place_id)).length / 50)} batches due to rate limits</p>}
+              <div className="flex gap-3 mt-6">
+                <button onClick={bulkSendAll} className="flex-1 py-3 rounded-md text-sm font-bold text-white" style={{ backgroundColor: "#316342" }}>Proceed</button>
+                <button onClick={() => setShowBulkConfirm(false)} className="px-6 py-3 rounded-md text-sm font-bold border" style={{ color: "#414942", borderColor: "#c1c9bf" }}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Tier 1 Results */}
         {tier1.length > 0 && (
           <div className="mb-12">
-            <div className="py-3 px-6 rounded-t-xl flex items-center justify-between" style={{ backgroundColor: "#fdc39a" }}>
-              <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "#794e2e" }}>★ TIER 1 — HIGH Priority</span>
-              <div className="flex items-center gap-3">
-                {bulkProgress && <span className="text-xs italic" style={{ color: "#794e2e" }}>{bulkProgress}</span>}
-                {(() => { const count = tier1.filter(r => r.email && !emailed.has(r.place_id)).length; return (
-                  <button onClick={() => setShowBulkConfirm(true)} disabled={bulkSending || count === 0} className="px-4 py-1.5 rounded-md text-xs font-bold text-white disabled:opacity-50" style={{ backgroundColor: "#316342" }}>
-                    {bulkSending ? "Sending..." : count === 0 ? "No Emails Found in Tier 1" : `Send to ${count} Tier 1`}
-                  </button>
-                ); })()}
-              </div>
+            <div className="py-3 px-6 rounded-t-xl text-[11px] font-bold uppercase tracking-widest" style={{ backgroundColor: "#fdc39a", color: "#794e2e" }}>
+              ★ TIER 1 — HIGH Priority
             </div>
             <div className="rounded-b-xl border border-t-0 overflow-hidden" style={{ backgroundColor: "#f8f3eb", borderColor: "rgba(193,201,191,0.2)" }}>
               <ResultTable results={tier1} saved={saved} emailed={emailed} onSave={saveProspect} onEmail={sendEmail} />
@@ -238,20 +254,7 @@ export default function ScannerPage() {
           </div>
         )}
 
-        {/* Bulk Confirm Modal */}
-        {showBulkConfirm && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
-            <div className="w-full max-w-md p-8 rounded-xl" style={{ backgroundColor: "#F5F0E8" }}>
-              <h3 className="text-xl font-bold mb-4" style={{ color: "#1d1c17" }}>Confirm Bulk Send</h3>
-              <p className="text-sm mb-2" style={{ color: "#414942" }}>You&apos;re about to send <strong>{tier1.filter(r => r.email && !emailed.has(r.place_id)).length}</strong> cold emails. This cannot be undone.</p>
-              {tier1.filter(r => r.email && !emailed.has(r.place_id)).length > 50 && <p className="text-xs mb-4 italic" style={{ color: "#805533" }}>Sending in {Math.ceil(tier1.filter(r => r.email && !emailed.has(r.place_id)).length / 50)} batches due to rate limits</p>}
-              <div className="flex gap-3 mt-6">
-                <button onClick={bulkSendTier1} className="flex-1 py-3 rounded-md text-sm font-bold text-white" style={{ backgroundColor: "#316342" }}>Proceed</button>
-                <button onClick={() => setShowBulkConfirm(false)} className="px-6 py-3 rounded-md text-sm font-bold border" style={{ color: "#414942", borderColor: "#c1c9bf" }}>Cancel</button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Old bulk modal removed — now above results */}
 
         {/* Tier 2 Results */}
         {tier2.length > 0 && (

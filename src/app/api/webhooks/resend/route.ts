@@ -18,7 +18,6 @@ export async function POST(req: NextRequest) {
   };
 
   const body = await req.text();
-
   const wh = new Webhook(secret);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let payload: any;
@@ -31,19 +30,57 @@ export async function POST(req: NextRequest) {
   }
 
   const { type, data } = payload;
-  const recipientEmail = data?.email_to?.[0];
-
-  if (!recipientEmail) {
-    return NextResponse.json({ received: true });
-  }
+  const recipientEmail = data?.to?.[0] || data?.email_to?.[0];
+  if (!recipientEmail) return NextResponse.json({ received: true });
 
   const supabase = getSupabase();
 
+  // Extract prospect metadata from tags
+  const tags: Record<string, string> = {};
+  if (Array.isArray(data?.tags)) {
+    for (const tag of data.tags) {
+      if (tag.name && tag.value) tags[tag.name] = tag.value;
+    }
+  }
+
   if (type === "email.delivered") {
-    await supabase
+    // Check if prospect already in CRM
+    const { data: existing } = await supabase
       .from("pineyweb_prospects")
-      .update({ email_delivered: true })
-      .eq("email", recipientEmail);
+      .select("id")
+      .eq("email", recipientEmail)
+      .single();
+
+    if (!existing && tags.place_id) {
+      // Save to CRM on first delivery
+      await supabase.from("pineyweb_prospects").insert({
+        place_id: tags.place_id,
+        business_name: tags.business_name || "",
+        address: tags.address || "",
+        city: tags.city || "",
+        phone: tags.phone || null,
+        email: recipientEmail,
+        email_source: tags.email_source || null,
+        rating: tags.rating ? Number(tags.rating) : null,
+        review_count: tags.review_count ? Number(tags.review_count) : null,
+        priority_tier: tags.priority_tier ? Number(tags.priority_tier) : 2,
+        outreach_status: "contacted",
+        contact_method: "Email",
+        emailed_at: new Date().toISOString(),
+        email_delivered: true,
+      });
+    } else {
+      // Already in CRM — update delivery status
+      await supabase
+        .from("pineyweb_prospects")
+        .update({
+          email_delivered: true,
+          outreach_status: "contacted",
+          contact_method: "Email",
+          emailed_at: new Date().toISOString(),
+        })
+        .eq("email", recipientEmail);
+    }
   }
 
   if (type === "email.complained") {

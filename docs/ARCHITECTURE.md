@@ -96,7 +96,15 @@ Validates confirmation number, activates client account, sends AccountActivated 
 Admin-only. Sends BuildStarted or SiteLive email to a client. Verifies admin role. Updates client status.
 
 ### POST /api/admin/outreach
-Cold email outreach via Resend. Accepts single prospect or array (max 50). Uses template `c61d6c30-11af-4c99-b9ef-2e6c74af25ea` with variables: firstName, businessName, reviewCount, portfolioUrl, unsubscribeUrl. 200ms delay between sends. Updates prospect status to 'contacted' and sets emailed_at. Returns { sent, failed, errors }.
+Cold email outreach via Resend. Accepts single prospect or array (max 50). Uses template `c61d6c30-11af-4c99-b9ef-2e6c74af25ea` with variables + tags containing full prospect metadata. 200ms delay between sends. Does NOT save to CRM or mark as contacted at send time — waits for delivery confirmation via Resend webhook. Returns { sent, failed, errors }.
+
+### Delivery-First CRM Flow
+1. Scanner finds prospects → shows in results table
+2. "Send Email" or "Send All Emails" fires outreach API
+3. Outreach API sends via Resend with prospect data in tags
+4. Resend webhook fires `email.delivered` → saves prospect to CRM with status='contacted'
+5. If prospect already in CRM, updates delivery status only
+6. Spam complaints (`email.complained`) set `email_spam: true`
 
 ### Email Enrichment Pipeline
 After website detection filters prospects, the scanner enriches each with email lookup:
