@@ -24,38 +24,38 @@ export default function DashboardHome() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push("/login"); return; }
 
+      // Try client-side first, fall back to server if RLS blocks
+      let clientData = null;
       const { data, error } = await supabase
         .from("pineyweb_clients")
         .select("full_name, business_name, email, status, site_url, tier")
         .eq("user_id", session.user.id)
         .single();
 
-      console.log("[Dashboard] client status:", data?.status, "user_id:", session.user.id, "error:", error?.message || "none");
+      console.log("[Dashboard] client-side:", data?.status, "error:", error?.message || "none");
 
-      if (!data) {
-        // RLS may be blocking — try server-side fallback
-        console.log("[Dashboard] Client row null, trying server fallback...");
+      if (data) {
+        clientData = data;
+      } else {
+        // RLS may be blocking — use server fallback
+        console.log("[Dashboard] Trying server fallback...");
         try {
           const res = await fetch("/api/auth/me", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: session.user.id }) });
           const fallback = await res.json();
-          if (fallback.data) {
-            console.log("[Dashboard] Server fallback status:", fallback.data.status);
-            if (fallback.data.status === "suspended") { router.push("/dashboard/suspended"); return; }
-            if (fallback.data.status === "pending" || fallback.data.status === "active") { router.push("/dashboard/onboarding"); return; }
-            setProfile(fallback.data);
-            setLoading(false);
-            return;
-          }
+          console.log("[Dashboard] Server fallback:", fallback.data?.status);
+          if (fallback.data) clientData = fallback.data;
         } catch (e) { console.error("[Dashboard] Server fallback failed:", e); }
-        router.push("/?pending=1");
-        return;
       }
-      if (data.status === "suspended") { router.push("/dashboard/suspended"); return; }
-      if (data.status === "pending" || data.status === "active") {
-        router.push("/dashboard/onboarding");
-        return;
-      }
-      setProfile(data);
+
+      if (!clientData) { router.push("/?pending=1"); return; }
+
+      console.log("[Dashboard] Final status:", clientData.status);
+
+      if (clientData.status === "suspended") { router.push("/dashboard/suspended"); return; }
+      if (clientData.status === "pending" || clientData.status === "active") { router.push("/dashboard/onboarding"); return; }
+
+      // live, in_progress — show dashboard
+      setProfile(clientData);
       setLoading(false);
     };
     checkAuth();
