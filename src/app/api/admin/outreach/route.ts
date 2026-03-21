@@ -59,17 +59,6 @@ export async function POST(request: NextRequest) {
           to: prospect.email,
           subject: `${prospect.review_count} reviews and no website yet?`,
           html: personalizedHtml,
-          tags: [
-            { name: "place_id", value: prospect.place_id },
-            { name: "business_name", value: (prospect.business_name || "").substring(0, 50) },
-            { name: "city", value: prospect.city || "" },
-            { name: "priority_tier", value: String(prospect.priority_tier || 2) },
-            { name: "address", value: (prospect.address || "").substring(0, 50) },
-            { name: "phone", value: prospect.phone || "" },
-            { name: "email_source", value: prospect.email_source || "" },
-            { name: "rating", value: String(prospect.rating || 0) },
-            { name: "review_count", value: String(prospect.review_count || 0) },
-          ],
         });
 
         if (result.error) {
