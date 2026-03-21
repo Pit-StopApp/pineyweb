@@ -83,8 +83,22 @@ Handles three Stripe events:
 ### POST /api/webhooks/resend
 Resend webhook handler with svix signature verification (`RESEND_WEBHOOK_SECRET_PINEYWEB`). Listens for:
 - **email.delivered** — Sets `email_delivered: true` on matching prospect by email
-- **email.complained** — Sets `email_spam: true` on matching prospect by email
+- **email.complained** — Sets `email_spam: true`, pauses automation (daily_cap=0), sends admin alert
 Prospects CRM shows ✅ for delivered, ⚠️ for spam complaints next to status badge.
+
+### GET /api/cron/auto-scan
+Daily cron (8am UTC via Vercel Cron). Automated scanning pipeline:
+1. Checks daily send cap from `pineyweb_daily_send_tracker` — stops if reached or paused (cap=0)
+2. Gets next 3 unscanned cities from `pineyweb_scanner_queue` (closest to Longview first)
+3. Runs keyword + type searches for each city via `/api/admin/scanner`
+4. Sends cold outreach to new prospects with emails (up to remaining daily cap)
+5. Updates queue status, daily tracker, sends summary email to admin
+
+### pineyweb_scanner_queue
+Tracks 200+ Texas cities sorted by distance from Longview. Columns: city, lat/lng, distance, population, status (pending/scanning/complete/error), prospects_found, emails_found, emails_sent, last_scanned_at.
+
+### pineyweb_daily_send_tracker
+One row per day: date, emails_sent, daily_cap. daily_cap=0 pauses automation. Set via /admin/queue page.
 
 ### GET /api/cron/payment-check
 Daily cron job (9am UTC via Vercel Cron). Finds clients suspended exactly 10 days ago (by `suspended_at`). Sends admin alert email for each, noting per Terms of Service they may now consider permanent termination. Secured by `CRON_SECRET` Bearer token.

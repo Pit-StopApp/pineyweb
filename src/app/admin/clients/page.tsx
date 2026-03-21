@@ -100,6 +100,7 @@ export default function AdminClients() {
           <Link href="/admin/clients" className="text-sm tracking-wide uppercase font-bold" style={{ color: "#316342" }}>Clients</Link>
           <Link href="/admin/scanner" className="text-sm tracking-wide uppercase" style={{ color: "#414942", opacity: 0.7 }}>Scanner</Link>
           <Link href="/admin/prospects" className="text-sm tracking-wide uppercase" style={{ color: "#414942", opacity: 0.7 }}>Prospects</Link>
+          <Link href="/admin/queue" className="text-sm tracking-wide uppercase" style={{ color: "#414942", opacity: 0.7 }}>Queue</Link>
         </nav>
         <div className="flex items-center gap-4">
           <span className="text-sm" style={{ color: "#414942" }}>{adminName}</span>

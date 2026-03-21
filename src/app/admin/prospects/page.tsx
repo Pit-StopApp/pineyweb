@@ -142,6 +142,7 @@ export default function ProspectsPage() {
             <Link href="/admin/clients" style={{ color: "#414942" }}>Clients</Link>
             <Link href="/admin/scanner" style={{ color: "#414942" }}>Scanner</Link>
             <span className="font-semibold pb-1" style={{ color: "#316342", borderBottom: "2px solid #316342" }}>Prospects</span>
+            <Link href="/admin/queue" style={{ color: "#414942" }}>Queue</Link>
           </nav>
           <div className="flex items-center gap-6">
             <span className="text-sm italic" style={{ color: "#414942" }}>{adminName}</span>

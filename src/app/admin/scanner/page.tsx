@@ -144,6 +144,7 @@ export default function ScannerPage() {
             <Link href="/admin/clients" style={{ color: "#414942" }}>Clients</Link>
             <span className="font-semibold pb-1" style={{ color: "#316342", borderBottom: "2px solid #316342" }}>Scanner</span>
             <Link href="/admin/prospects" style={{ color: "#414942" }}>Prospects</Link>
+            <Link href="/admin/queue" style={{ color: "#414942" }}>Queue</Link>
           </nav>
           <div className="flex items-center gap-6">
             <span className="text-sm italic" style={{ color: "#414942" }}>{adminName}</span>

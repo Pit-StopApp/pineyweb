@@ -84,10 +84,23 @@ export async function POST(req: NextRequest) {
   }
 
   if (type === "email.complained") {
-    await supabase
-      .from("pineyweb_prospects")
-      .update({ email_spam: true })
-      .eq("email", recipientEmail);
+    await supabase.from("pineyweb_prospects").update({ email_spam: true }).eq("email", recipientEmail);
+
+    // Auto-pause: set daily cap to 0
+    const today = new Date().toISOString().split("T")[0];
+    await supabase.from("pineyweb_daily_send_tracker").upsert({ date: today, daily_cap: 0 }, { onConflict: "date" });
+
+    // Alert admin
+    try {
+      const { Resend } = await import("resend");
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      await resend.emails.send({
+        from: "Piney Web Bot <noreply@pineyweb.com>",
+        to: "hello@pineyweb.com",
+        subject: `⚠️ Spam complaint — sending paused`,
+        html: `<p style="font-family:Georgia,serif;font-size:16px;color:#1d1c17;">Spam complaint received from <strong>${recipientEmail}</strong>.<br/><br/>Automated sending has been paused (daily_cap set to 0).<br/><br/>Review before resuming at <a href="https://pineyweb.com/admin/queue">Admin Queue</a>.</p>`,
+      });
+    } catch { /* non-blocking */ }
   }
 
   return NextResponse.json({ received: true });
