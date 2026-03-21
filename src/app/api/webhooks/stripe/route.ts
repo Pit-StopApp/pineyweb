@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
 
     // Suspend after 3 failed attempts
     if (attemptCount >= 3 && customerEmail) {
-      await supabase.from("pineyweb_clients").update({ status: "suspended" }).eq("email", customerEmail);
+      await supabase.from("pineyweb_clients").update({ status: "suspended", suspended_at: new Date().toISOString() }).eq("email", customerEmail);
     }
   }
 

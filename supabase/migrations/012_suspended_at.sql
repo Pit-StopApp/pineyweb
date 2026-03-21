@@ -1,0 +1,2 @@
+ALTER TABLE pineyweb_clients
+ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMPTZ;
