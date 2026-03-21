@@ -167,7 +167,16 @@ export default function EditSite() {
       </div>
 
       {/* Two-column layout */}
-      <div className="flex flex-col md:flex-row gap-12 items-start">
+      {/* Mobile: Desktop only message */}
+      <div className="md:hidden flex flex-col items-center justify-center text-center py-20 px-8">
+        <span style={{ fontSize: "48px" }}>🖥️</span>
+        <h2 className="text-2xl font-bold mt-6 mb-3" style={{ color: "#1d1c17" }}>Desktop required for editing</h2>
+        <p className="text-lg leading-relaxed max-w-sm" style={{ color: "#414942" }}>The website editor is optimized for desktop and laptop browsers. Please visit <strong>pineyweb.com/dashboard/edit</strong> on a larger screen to make changes to your site.</p>
+        <p className="text-sm mt-6 italic" style={{ color: "#414942" }}>Need to request a change from your phone? Use the chat bubble below.</p>
+      </div>
+
+      {/* Desktop: Full editor */}
+      <div className="hidden md:flex gap-12 items-start">
         {/* Left: Form (40%) */}
         <section className="w-full md:w-[40%] space-y-10">
           <div className="flex items-start justify-between">
