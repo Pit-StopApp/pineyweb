@@ -32,10 +32,10 @@ export default function EditSite() {
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
-  const [hasChanges, setHasChanges] = useState(false);
-  const [uploading, setUploading] = useState<string | null>(null);
+  const [, setHasChanges] = useState(false);
+  const [, setUploading] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadKey, setUploadKey] = useState("");
+  const [uploadKey] = useState("");
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
 
