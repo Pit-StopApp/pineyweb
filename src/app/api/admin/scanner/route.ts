@@ -95,10 +95,16 @@ async function getPlaceDetails(placeId: string, apiKey: string) {
 
 export async function POST(request: NextRequest) {
   try {
+    console.log("[Scanner] NEXT_PUBLIC_GOOGLE_MAPS_API_KEY present:", !!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY);
+    console.log("[Scanner] NEXT_PUBLIC_GOOGLE_MAPS_API_KEY length:", process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.length);
+    console.log("[Scanner] NEXT_PUBLIC_GOOGLE_MAPS_API_KEY first 6:", process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.substring(0, 6));
+    console.log("[Scanner] GOOGLE_API_KEY present:", !!process.env.GOOGLE_API_KEY);
+    console.log("[Scanner] GOOGLE_API_KEY length:", process.env.GOOGLE_API_KEY?.length);
+
     const { city, state = "TX", batch = 0, mode = "keywords" } = await request.json();
     if (!city) return NextResponse.json({ error: "city required" }, { status: 400 });
 
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!;
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_API_KEY || "";
     const supabase = getSupabase();
     const cityState = `${city}, ${state}`;
     const radiusMeters = 40234;
@@ -145,6 +151,7 @@ export async function POST(request: NextRequest) {
       if (start >= KEYWORDS.length) return NextResponse.json({ results: [], stats, done: true, debug: [] });
 
       const debug: string[] = [];
+      debug.push(`API Key: present=${!!apiKey}, length=${apiKey?.length}, first6=${apiKey?.substring(0, 6)}`);
       debug.push(`Batch ${batch}: keywords ${start}-${end - 1} of ${KEYWORDS.length}`);
       debug.push(`Location: ${location.lat}, ${location.lng} | City: ${cityState}`);
       debug.push(`Using Places API (New) — places.googleapis.com/v1/`);
