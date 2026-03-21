@@ -14,6 +14,7 @@ export default function QueuePage() {
   const [dailyCap, setDailyCap] = useState(50);
   const [emailsToday, setEmailsToday] = useState(0);
   const [newCap, setNewCap] = useState("");
+  const [seeding, setSeeding] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -82,6 +83,31 @@ export default function QueuePage() {
           <h1 className="text-4xl font-bold tracking-tight mb-2" style={{ color: "#1d1c17" }}>Scanner Queue</h1>
           <p className="text-lg italic" style={{ color: "#414942" }}>Automated daily scanning expanding outward from Longview, TX.</p>
         </div>
+
+        {/* Seed button when empty */}
+        {total === 0 && (
+          <div className="mb-10 p-8 rounded-xl text-center border" style={{ backgroundColor: "#f8f3eb", borderColor: "rgba(193,201,191,0.2)" }}>
+            <span className="material-symbols-outlined text-4xl mb-4 block" style={{ color: "#c1c9bf" }}>location_city</span>
+            <p className="text-sm mb-4" style={{ color: "#414942" }}>No cities in the queue yet. Seed 200+ Texas cities to start automated scanning.</p>
+            <button
+              onClick={async () => {
+                setSeeding(true);
+                const res = await fetch("/api/admin/seed-queue", { method: "POST" });
+                const data = await res.json();
+                if (data.seeded) {
+                  const { data: q } = await supabase.from("pineyweb_scanner_queue").select("*").order("distance_from_longview_miles", { ascending: true });
+                  setQueue((q || []) as QueueItem[]);
+                }
+                setSeeding(false);
+              }}
+              disabled={seeding}
+              className="px-8 py-3 rounded-md font-bold text-white text-sm disabled:opacity-50 transition-all active:scale-95"
+              style={{ backgroundColor: "#316342" }}
+            >
+              {seeding ? "Seeding..." : "Seed Texas Cities"}
+            </button>
+          </div>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-10">
