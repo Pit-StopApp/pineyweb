@@ -4,6 +4,7 @@ import Image from "next/image";
 import { Suspense, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/context/AuthContext";
 
 export default function Home() {
   return (
@@ -69,6 +70,7 @@ function PendingBanner({ onDismiss }: { onDismiss: () => void }) {
 /* ─── Navbar ────────────────────────────────────────────────────────────── */
 function Navbar() {
   const [open, setOpen] = useState(false);
+  const { user, signOut } = useAuth();
   const links = [
     { href: "#pricing", label: "Pricing" },
     { href: "#portfolio", label: "Portfolio" },
@@ -92,18 +94,28 @@ function Navbar() {
               {l.label}
             </a>
           ))}
-          <a
-            href="/login"
-            className="text-sm font-medium text-gray-600 hover:text-pine-700 transition-colors"
-          >
-            Login
-          </a>
-          <a
-            href="/signup"
-            className="text-sm font-medium px-5 py-2 rounded-full bg-pine-700 text-white hover:bg-pine-800 transition-colors"
-          >
-            Sign Up
-          </a>
+          {user ? (
+            <>
+              <a href="/dashboard" className="text-sm font-medium text-gray-600 hover:text-pine-700 transition-colors">
+                Dashboard
+              </a>
+              <button
+                onClick={signOut}
+                className="text-sm font-medium text-gray-600 hover:text-pine-700 transition-colors"
+              >
+                Log Out
+              </button>
+            </>
+          ) : (
+            <>
+              <a href="/login" className="text-sm font-medium text-gray-600 hover:text-pine-700 transition-colors">
+                Login
+              </a>
+              <a href="/signup" className="text-sm font-medium px-5 py-2 rounded-full bg-pine-700 text-white hover:bg-pine-800 transition-colors">
+                Sign Up
+              </a>
+            </>
+          )}
         </div>
 
         <button
@@ -133,18 +145,17 @@ function Navbar() {
               {l.label}
             </a>
           ))}
-          <a
-            href="/login"
-            className="block text-sm font-medium text-gray-600 hover:text-pine-700"
-          >
-            Login
-          </a>
-          <a
-            href="/signup"
-            className="block text-sm font-medium text-pine-700"
-          >
-            Sign Up
-          </a>
+          {user ? (
+            <>
+              <a href="/dashboard" onClick={() => setOpen(false)} className="block text-sm font-medium text-gray-600 hover:text-pine-700">Dashboard</a>
+              <button onClick={() => { signOut(); setOpen(false); }} className="block text-sm font-medium text-gray-600 hover:text-pine-700 text-left">Log Out</button>
+            </>
+          ) : (
+            <>
+              <a href="/login" className="block text-sm font-medium text-gray-600 hover:text-pine-700">Login</a>
+              <a href="/signup" className="block text-sm font-medium text-pine-700">Sign Up</a>
+            </>
+          )}
         </div>
       )}
     </nav>
