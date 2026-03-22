@@ -38,6 +38,8 @@ export default function ProspectsPage() {
   const [sendProgress, setSendProgress] = useState("");
   const [showSendConfirm, setShowSendConfirm] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
+  const [sortCol, setSortCol] = useState<string>("priority_tier");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   useEffect(() => {
     const init = async () => {
@@ -130,8 +132,26 @@ export default function ProspectsPage() {
     }
     return true;
   });
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  const sorted = [...filtered].sort((a, b) => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    const av = (a as Record<string, unknown>)[sortCol];
+    const bv = (b as Record<string, unknown>)[sortCol];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
+    return String(av).localeCompare(String(bv)) * dir;
+  });
+
+  const toggleSort = (col: string) => {
+    if (sortCol === col) { setSortDir(d => d === "asc" ? "desc" : "asc"); }
+    else { setSortCol(col); setSortDir("asc"); }
+    setPage(0);
+  };
+
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+  const paginated = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: "#fef9f1", fontFamily: "'Lora', serif" }}>
@@ -207,12 +227,14 @@ export default function ProspectsPage() {
           <table className="w-full text-left">
             <thead>
               <tr className="text-[11px] uppercase tracking-[0.12em] font-bold border-b" style={{ color: "#414942", borderColor: "rgba(193,201,191,0.2)" }}>
-                <th className="py-4 pl-6">Business Name</th>
-                <th className="py-4">City</th>
-                <th className="py-4">Phone</th>
-                <th className="py-4">Priority</th>
-                <th className="py-4">Status</th>
-                <th className="py-4">Follow Up</th>
+                {([["business_name", "Business Name", "py-4 pl-6"], ["city", "City", "py-4"], ["_phone", "Phone", "py-4"], ["priority_tier", "Priority", "py-4"], ["outreach_status", "Status", "py-4"], ["follow_up_date", "Follow Up", "py-4"]] as const).map(([col, label, cls]) => {
+                  const sortable = col !== "_phone";
+                  return (
+                    <th key={col} className={`${cls}${sortable ? " cursor-pointer select-none hover:text-[#316342]" : ""}`} onClick={sortable ? () => toggleSort(col) : undefined}>
+                      {label}{sortCol === col ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                    </th>
+                  );
+                })}
                 <th className="py-4 text-right pr-6">Actions</th>
               </tr>
             </thead>
@@ -227,7 +249,7 @@ export default function ProspectsPage() {
                         <div className="py-4 pl-6 flex-1 min-w-0">
                           <span className="font-semibold" style={{ color: "#1d1c17" }}>{p.business_name}</span>
                         </div>
-                        <div className="py-4 w-24 text-sm" style={{ color: "#414942" }}>{p.city || "—"}</div>
+                        <div className="py-4 w-32 text-sm" style={{ color: "#414942" }}>{p.city || "—"}</div>
                         <div className="py-4 w-36 text-sm font-mono">{p.phone ? <a href={`tel:${p.phone}`} style={{ color: "#316342" }}>{p.phone}</a> : <span style={{ color: "#c1c9bf" }}>—</span>}</div>
                         <div className="py-4 w-20">
                           <span className="px-2.5 py-1 rounded-full text-[10px] font-bold" style={p.priority_tier === 1 ? { backgroundColor: "rgba(253,195,154,0.4)", color: "#794e2e" } : { backgroundColor: "rgba(193,201,191,0.3)", color: "#717971" }}>T{p.priority_tier}</span>
@@ -290,7 +312,7 @@ export default function ProspectsPage() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between px-6 py-4 border-t" style={{ borderColor: "rgba(193,201,191,0.2)" }}>
-              <span className="text-xs" style={{ color: "#717971" }}>Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length.toLocaleString()}</span>
+              <span className="text-xs" style={{ color: "#717971" }}>Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sorted.length)} of {sorted.length.toLocaleString()}</span>
               <div className="flex gap-1 items-center">
                 <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="px-3 py-1 rounded text-xs font-bold disabled:opacity-30" style={{ color: "#316342" }}>Previous</button>
                 {(() => {
