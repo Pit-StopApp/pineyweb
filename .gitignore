@@ -12,6 +12,9 @@
 # Facebook session cookies
 scripts/fb-session.json
 
+# Facebook scraper session reports
+scripts/session-reports/
+
 # next.js
 /.next/
 /out/

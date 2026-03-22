@@ -396,7 +396,16 @@ async function collectCandidates(page: Page): Promise<{ text: string; href: stri
 }
 
 // --- Try to match and extract from candidates ---
-type SearchResult = { url: string | null; email: string | null; website: string | null; inactive: boolean; inactiveReason: string | null };
+type SearchResult = {
+  url: string | null;
+  email: string | null;
+  website: string | null;
+  inactive: boolean;
+  inactiveReason: string | null;
+  matchType: "exact" | "fuzzy" | "no_match";
+  phoneConfirmed: boolean;
+  matchedPageName: string;
+};
 
 async function tryMatchCandidates(
   page: Page,
@@ -438,7 +447,7 @@ async function tryMatchCandidates(
 
       if (isRedirectedToPersonalProfile(page.url())) {
         console.log(`[${ts()}]   Redirected to personal profile — skipping`);
-        return { url: null, email: null, website: null, inactive: false, inactiveReason: null };
+        return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
       }
 
       const phoneOk = await confirmPhoneMatch(page, phone);
@@ -448,18 +457,23 @@ async function tryMatchCandidates(
         console.log(`[${ts()}]   Phone mismatch but name/city match, proceeding`);
       }
 
+      // Determine match type: exact if cleaned names are equal, fuzzy otherwise
+      const cleanedPage = fuzzyClean(text, city);
+      const cleanedBiz = fuzzyClean(matchName, city);
+      const matchType: "exact" | "fuzzy" = cleanedPage === cleanedBiz ? "exact" : "fuzzy";
+
       // Check if business is inactive before extracting email
       const { inactive, reason: inactiveReason } = await checkBusinessInactive(page);
       if (inactive) {
-        return { url: page.url(), email: null, website: null, inactive: true, inactiveReason };
+        return { url: page.url(), email: null, website: null, inactive: true, inactiveReason, matchType, phoneConfirmed: phoneOk, matchedPageName: text };
       }
 
       const { email, website } = await extractEmailFromPage(page);
-      return { url: page.url(), email, website, inactive: false, inactiveReason: null };
+      return { url: page.url(), email, website, inactive: false, inactiveReason: null, matchType, phoneConfirmed: phoneOk, matchedPageName: text };
     }
   }
 
-  return { url: null, email: null, website: null, inactive: false, inactiveReason: null };
+  return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
 }
 
 // --- Main search function ---
@@ -483,7 +497,7 @@ async function searchFacebook(
 
   if (page.url().includes("/login")) {
     console.log(`[${ts()}]   Session expired — redirected to login`);
-    return { url: null, email: null, website: null, inactive: false, inactiveReason: null };
+    return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
   }
 
   // Human scans search results
@@ -523,7 +537,7 @@ async function searchFacebook(
   }
 
   console.log(`[${ts()}]   No matching Facebook page found`);
-  return { url: null, email: null, website: null, inactive: false, inactiveReason: null };
+  return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
 }
 
 // --- Outreach ---
@@ -627,6 +641,43 @@ async function main() {
   let noEmail = 0;
   const total = prospects.length;
 
+  // --- Session report ---
+  type SessionRow = {
+    prospect_name: string;
+    facebook_page_found: string;
+    match_type: string;
+    phone_confirmed: string;
+    email_found: string;
+    email_sent: string;
+    facebook_url: string;
+    city: string;
+    notes: string;
+  };
+  const sessionRows: SessionRow[] = [];
+  const reportsDir = path.resolve("scripts/session-reports");
+  if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
+  const reportTimestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const reportPath = path.join(reportsDir, `report-${reportTimestamp}.csv`);
+
+  function csvEscape(val: string): string {
+    if (val.includes(",") || val.includes('"') || val.includes("\n")) {
+      return `"${val.replace(/"/g, '""')}"`;
+    }
+    return val;
+  }
+
+  function saveReport() {
+    if (sessionRows.length === 0) return;
+    const header = "prospect_name,facebook_page_found,match_type,phone_confirmed,email_found,email_sent,facebook_url,city,notes";
+    const lines = sessionRows.map(r =>
+      [r.prospect_name, r.facebook_page_found, r.match_type, r.phone_confirmed, r.email_found, r.email_sent, r.facebook_url, r.city, r.notes]
+        .map(csvEscape)
+        .join(",")
+    );
+    fs.writeFileSync(reportPath, header + "\n" + lines.join("\n") + "\n");
+    console.log(`[${ts()}] Report saved: ${reportPath} (${sessionRows.length} rows)`);
+  }
+
   function logProgress() {
     const hitRate = tested > 0 ? ((emailsFound / tested) * 100).toFixed(1) : "0.0";
     console.log(`\n[Progress] ${tested}/${total} | Emails found: ${emailsFound} | Sent: ${outreachSent} | Skipped: ${skipped} | No Facebook: ${noFacebook} | No email: ${noEmail} | Hit rate: ${hitRate}%`);
@@ -634,6 +685,7 @@ async function main() {
 
   process.on("SIGINT", () => {
     console.log("\n[Interrupted]");
+    saveReport();
     console.log("=== Session Summary ===");
     console.log(`Tested: ${tested}`);
     console.log(`Emails found: ${emailsFound}`);
@@ -664,7 +716,10 @@ async function main() {
     console.log(`\n[${ts()}] [${i + 1}/${prospects.length}] ${p.business_name} (${p.city}) — T${p.priority_tier}, ${p.rating}★, ${p.review_count} reviews`);
 
     try {
-      const { url, email, website, inactive, inactiveReason } = await searchFacebook(page, p.business_name, p.city, p.phone);
+      const result = await searchFacebook(page, p.business_name, p.city, p.phone);
+      const { url, email, website, inactive, inactiveReason, matchType, phoneConfirmed, matchedPageName } = result;
+      let rowNotes = "";
+      let emailSentThisRow = false;
 
       // Dead business detection — skip outreach entirely
       if (inactive && url) {
@@ -679,13 +734,9 @@ async function main() {
           .eq("place_id", p.place_id);
         console.log(`[${ts()}]   Marked: ${inactiveReason}`);
         skipped++;
-        tested++;
-        if (tested % 10 === 0) logProgress();
-        continue;
-      }
-
-      // If a website is found (not facebook/instagram), skip outreach
-      if (website) {
+        rowNotes = inactiveReason || "inactive";
+      } else if (website) {
+        // If a website is found (not facebook/instagram), skip outreach
         console.log(`[${ts()}]   Website found on Facebook page — skipping outreach`);
         await supabase
           .from("pineyweb_prospects")
@@ -696,12 +747,8 @@ async function main() {
           })
           .eq("place_id", p.place_id);
         skipped++;
-        tested++;
-        if (tested % 10 === 0) logProgress();
-        continue;
-      }
-
-      if (email) {
+        rowNotes = `website found: ${website}`;
+      } else if (email) {
         emailsFound++;
         console.log(`[${ts()}]   ✓ EMAIL FOUND: ${email}`);
         console.log(`[${ts()}]   Facebook page: ${url}`);
@@ -716,11 +763,13 @@ async function main() {
 
         if (updateErr) {
           console.log(`[${ts()}]   DB save failed: ${updateErr.message}`);
+          rowNotes = "db save failed";
         } else {
           console.log(`[${ts()}]   Saved to database`);
           const sent = await sendOutreach({ ...p, email });
-          if (sent) outreachSent++;
+          if (sent) { outreachSent++; emailSentThisRow = true; }
         }
+        if (!phoneConfirmed) rowNotes = rowNotes ? `${rowNotes}, phone mismatch` : "phone mismatch";
       } else if (url) {
         noEmail++;
         console.log(`[${ts()}]   ✗ Page found but no email: ${url}`);
@@ -729,6 +778,7 @@ async function main() {
           .update({ notes: "Facebook found, no email listed", contact_method: "facebook_message", facebook_url: url })
           .eq("place_id", p.place_id);
         console.log(`[${ts()}]   Marked: Facebook found, no email listed`);
+        rowNotes = "no email on page";
       } else {
         noFacebook++;
         console.log(`[${ts()}]   ✗ No Facebook page found`);
@@ -739,12 +789,37 @@ async function main() {
         console.log(`[${ts()}]   Marked: No Facebook presence`);
       }
 
+      sessionRows.push({
+        prospect_name: p.business_name,
+        facebook_page_found: matchedPageName,
+        match_type: matchType,
+        phone_confirmed: String(phoneConfirmed),
+        email_found: email || "",
+        email_sent: String(emailSentThisRow),
+        facebook_url: url || "",
+        city: p.city,
+        notes: rowNotes,
+      });
+
       tested++;
       if (tested % 10 === 0) logProgress();
+      if (tested % 25 === 0) saveReport();
     } catch (err) {
       console.log(`[${ts()}]   ✗ Error: ${err instanceof Error ? err.message : err}`);
+      sessionRows.push({
+        prospect_name: p.business_name,
+        facebook_page_found: "",
+        match_type: "no_match",
+        phone_confirmed: "false",
+        email_found: "",
+        email_sent: "false",
+        facebook_url: "",
+        city: p.city,
+        notes: `error: ${err instanceof Error ? err.message : err}`,
+      });
       tested++;
       if (tested % 10 === 0) logProgress();
+      if (tested % 25 === 0) saveReport();
     }
 
     // Random delay 31-57 seconds between searches
@@ -758,6 +833,8 @@ async function main() {
   console.log(`\n[${ts()}] Session cookies saved.`);
 
   await browser.close();
+
+  saveReport();
 
   console.log(`\n=== Results ===`);
   console.log(`Tested: ${tested}`);
