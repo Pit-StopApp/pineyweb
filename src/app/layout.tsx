@@ -11,9 +11,9 @@ const lora = Lora({
 });
 
 export const metadata: Metadata = {
-  title: "Piney Web Co. | East Texas Web Design",
+  title: "Piney Web Co. | Websites Built to Bring You Customers",
   description:
-    "Professional websites for East Texas small businesses. Custom design, local SEO, and ongoing support from a team that understands your market.",
+    "We build websites for local businesses designed to be found online and convert visitors into paying customers. Simple, professional, and built to grow with you.",
 };
 
 export default function RootLayout({

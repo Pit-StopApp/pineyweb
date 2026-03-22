@@ -184,6 +184,9 @@ function Hero() {
           <br />
           <span className="italic text-leather-600">Are you there?</span>
         </h1>
+        <p className="text-lg md:text-xl text-gray-600 max-w-2xl mx-auto mb-10 -mt-4">
+          We build websites designed to be found, trusted, and convert visitors into paying customers — not just look good.
+        </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <a
             href="#contact"
@@ -233,13 +236,12 @@ function WhyPineyWeb() {
           built to last.
         </p>
         <p className="text-gray-700 leading-relaxed mb-12">
-          We&apos;re local. We know East Texas businesses because we work alongside
-          them every day. When we build your site, we&apos;re not outsourcing it
-          overseas or running it through a drag-and-drop builder. We&apos;re writing
-          real code, built specifically for your business. And when you grow —
-          when you need online ordering, a booking system, or a customer portal —
-          we can build that too. No switching providers. No starting over. Just
-          call us.
+          We know local businesses because we work alongside them every day.
+          When we build your site, we&apos;re not outsourcing it overseas or running
+          it through a drag-and-drop builder. We&apos;re writing real code, built
+          specifically for your business. And when you grow — when you need
+          online ordering, a booking system, or a customer portal — we can build
+          that too. No switching providers. No starting over. Just call us.
         </p>
         <div className="grid sm:grid-cols-2 gap-x-12 gap-y-4">
           {capabilities.map((item) => (
@@ -326,7 +328,7 @@ function Pricing() {
           </h2>
           <p className="text-gray-600 max-w-2xl mx-auto">
             No hidden fees. No long-term contracts. Just quality web services at
-            prices that make sense for East Texas businesses.
+            prices that make sense for local businesses.
           </p>
         </div>
 
@@ -717,9 +719,8 @@ function Footer() {
               Piney Web Co.
             </h3>
             <p className="text-sm leading-relaxed" style={{ color: '#3D2B1F' }}>
-              Professional web design and digital marketing for East Texas small
-              businesses. Based in Longview, serving the entire piney woods
-              region.
+              Professional web design for local businesses nationwide. Built to
+              bring customers to you.
             </p>
           </div>
           <div>
