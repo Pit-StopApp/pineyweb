@@ -60,6 +60,7 @@ const NON_NAME_WORDS = new Set([
 
 interface Prospect {
   id: string;
+  place_id: string;
   business_name: string;
   phone: string | null;
   city: string;
@@ -119,7 +120,7 @@ async function main() {
   while (true) {
     const { data, error } = await supabase
       .from("pineyweb_prospects")
-      .select("id, business_name, phone, city, rating, review_count")
+      .select("id, place_id, business_name, phone, city, rating, review_count")
       .is("email", null)
       .not("phone", "is", null)
       .gte("review_count", 5)
@@ -144,8 +145,8 @@ async function main() {
   }
 
   console.log(`Found ${withNames.length} prospects with person names in business_name`);
-  const toTest = withNames.slice(0, 100);
-  console.log(`Testing PDL Person Enrichment on ${toTest.length} prospects...\n`);
+  const toTest = withNames.slice(100, 190);
+  console.log(`Skipping first 100 (already tested). Testing next ${toTest.length} prospects...\n`);
 
   let hits = 0;
   let tested = 0;
@@ -172,7 +173,14 @@ async function main() {
         const unique = Array.from(new Set(emails.filter(Boolean)));
         if (unique.length > 0) {
           hits++;
-          console.log(`✓ ${p.business_name} (${p.city}) | name: "${extractedName}" → ${unique.join(", ")}`);
+          const foundEmail = unique[0];
+          // Save to database
+          const { error: updateErr } = await supabase
+            .from("pineyweb_prospects")
+            .update({ email: foundEmail, email_source: "PDL" })
+            .eq("place_id", p.place_id);
+          const saved = updateErr ? `(save failed: ${updateErr.message})` : "(saved)";
+          console.log(`✓ ${p.business_name} (${p.city}) | name: "${extractedName}" → ${foundEmail} ${saved}`);
         } else {
           console.log(`✗ ${p.business_name} (${p.city}) | name: "${extractedName}" → none`);
         }
