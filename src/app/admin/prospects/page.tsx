@@ -21,7 +21,7 @@ const STATUS_STYLES: Record<string, { bg: string; color: string; dot?: string }>
 };
 const STATUS_LABELS: Record<string, string> = { new: "New", contacted: "Contacted", follow_up: "Follow Up", closed_won: "Won", closed_lost: "Lost" };
 
-const PAGE_SIZE = 10;
+const PAGE_SIZES = [10, 50, 100, 500, 1000];
 
 export default function ProspectsPage() {
   const router = useRouter();
@@ -31,6 +31,7 @@ export default function ProspectsPage() {
   const [expandedNote, setExpandedNote] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(50);
   const [adminName, setAdminName] = useState("Admin");
   const [enriching, setEnriching] = useState(false);
   const [enrichProgress, setEnrichProgress] = useState("");
@@ -150,8 +151,8 @@ export default function ProspectsPage() {
     setPage(0);
   };
 
-  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
-  const paginated = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const totalPages = Math.ceil(sorted.length / pageSize);
+  const paginated = sorted.slice(page * pageSize, (page + 1) * pageSize);
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: "#fef9f1", fontFamily: "'Lora', serif" }}>
@@ -312,7 +313,12 @@ export default function ProspectsPage() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between px-6 py-4 border-t" style={{ borderColor: "rgba(193,201,191,0.2)" }}>
-              <span className="text-xs" style={{ color: "#717971" }}>Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sorted.length)} of {sorted.length.toLocaleString()}</span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs" style={{ color: "#717971" }}>Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, sorted.length)} of {sorted.length.toLocaleString()}</span>
+                <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(0); }} className="text-xs border rounded px-2 py-1" style={{ borderColor: "#c1c9bf", color: "#414942" }}>
+                  {PAGE_SIZES.map(s => <option key={s} value={s}>{s} / page</option>)}
+                </select>
+              </div>
               <div className="flex gap-1 items-center">
                 <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="px-3 py-1 rounded text-xs font-bold disabled:opacity-30" style={{ color: "#316342" }}>Previous</button>
                 {(() => {
