@@ -246,7 +246,7 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
       return { email: mainEmail, website };
     }
 
-    // Check mailto links on main page
+    // Check mailto links on main page — click like a human would
     const mailtoLinks = await page.locator('a[href^="mailto:"]').all();
     for (const link of mailtoLinks) {
       const href = await link.getAttribute("href").catch(() => null);
@@ -254,7 +254,13 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
         const raw = href.replace("mailto:", "").split("?")[0];
         const email = extractCleanEmail(raw);
         if (email) {
-          console.log(`[${ts()}]   Email found via mailto link`);
+          console.log(`[${ts()}]   Email found via mailto link — clicking it`);
+          await link.hover().catch(() => {});
+          await page.waitForTimeout(Math.floor(Math.random() * 500) + 500);
+          await link.click().catch(() => {});
+          await page.waitForTimeout(Math.floor(Math.random() * 1000) + 1000);
+          await page.keyboard.press("Escape").catch(() => {});
+          await page.waitForTimeout(Math.floor(Math.random() * 500) + 300);
           return { email, website };
         }
       }
@@ -267,11 +273,24 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
       return { email: null, website };
     }
 
-    const contactUrl = currentUrl.replace(/\/$/, "") + "/directory_contact_info";
-    console.log(`[${ts()}]   No email on main page, trying: ${contactUrl}`);
-    // Before navigating to contact info
-    await page.waitForTimeout(Math.floor(Math.random() * 2000) + 1000);
-    await page.goto(contactUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
+    // 30% of the time click the About tab naturally instead of navigating directly
+    const aboutTab = page.locator('a[href*="/about"]').first();
+    const useAboutTab = Math.random() < 0.3 && await aboutTab.isVisible().catch(() => false);
+
+    if (useAboutTab) {
+      console.log(`[${ts()}]   Clicking About tab to explore...`);
+      await aboutTab.hover().catch(() => {});
+      await page.waitForTimeout(Math.floor(Math.random() * 500) + 500);
+      await aboutTab.click().catch(() => {});
+      await page.waitForTimeout(Math.floor(Math.random() * 2000) + 2000);
+      await humanScroll(page);
+    } else {
+      const contactUrl = currentUrl.replace(/\/$/, "") + "/directory_contact_info";
+      console.log(`[${ts()}]   No email on main page, trying: ${contactUrl}`);
+      // Before navigating to contact info
+      await page.waitForTimeout(Math.floor(Math.random() * 2000) + 1000);
+      await page.goto(contactUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
+    }
     // Human reads contact info page
     await page.waitForTimeout(Math.floor(Math.random() * 2000) + 2000);
     await humanScroll(page);
@@ -291,6 +310,11 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
       console.log(`[${ts()}]   Email found on contact info page`);
       return { email: contactEmail, website: contactWebsite };
     }
+
+    // Linger when no email found — human double-checking
+    const lingerMs = Math.floor(Math.random() * 2000) + 3000; // 3-5s
+    console.log(`[${ts()}]   No email found — lingering ${Math.round(lingerMs / 1000)}s`);
+    await page.waitForTimeout(lingerMs);
 
     return { email: null, website: contactWebsite };
   } catch (err) {
@@ -469,6 +493,14 @@ async function tryMatchCandidates(
       }
 
       const { email, website } = await extractEmailFromPage(page);
+
+      // 40% chance scroll back to top before leaving — one last look
+      if (Math.random() < 0.4) {
+        console.log(`[${ts()}]   Scrolling back to top before leaving`);
+        await page.evaluate(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+        await page.waitForTimeout(Math.floor(Math.random() * 1000) + 1000);
+      }
+
       return { url: page.url(), email, website, inactive: false, inactiveReason: null, matchType, phoneConfirmed: phoneOk, matchedPageName: text };
     }
   }
