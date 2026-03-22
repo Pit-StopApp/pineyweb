@@ -248,22 +248,28 @@ async function sendOutreach(prospect: {
 async function main() {
   console.log(`[${ts()}] Facebook Scraper starting...\n`);
 
-  const { data: prospects, error } = await supabase
+  const { data: rawProspects, error } = await supabase
     .from("pineyweb_prospects")
-    .select("id, place_id, business_name, phone, city, rating, review_count, priority_tier")
+    .select("id, place_id, business_name, phone, city, rating, review_count, priority_tier, notes")
     .is("email", null)
     .not("phone", "is", null)
     .gte("review_count", 5)
-    .not("notes", "eq", "No Facebook presence")
-    .not("notes", "eq", "Facebook found, no email listed")
     .order("priority_tier", { ascending: true })
     .order("rating", { ascending: false })
-    .limit(5);
+    .limit(50);
 
   if (error) { console.error("Supabase error:", error.message); process.exit(1); }
-  if (!prospects || prospects.length === 0) { console.log("No prospects found"); return; }
+  if (!rawProspects || rawProspects.length === 0) { console.log("No prospects found"); return; }
 
-  console.log(`[${ts()}] Loaded ${prospects.length} prospects\n`);
+  // Filter out already-searched prospects client-side
+  const prospects = rawProspects.filter(p =>
+    p.notes !== "No Facebook presence" &&
+    p.notes !== "Facebook found, no email listed"
+  ).slice(0, 5);
+
+  if (prospects.length === 0) { console.log("All prospects already searched"); return; }
+
+  console.log(`[${ts()}] Loaded ${prospects.length} prospects (filtered from ${rawProspects.length})\n`);
 
   const browser = await chromium.launch({
     headless: false,
@@ -292,10 +298,10 @@ async function main() {
         console.log(`[${ts()}]   ✓ EMAIL FOUND: ${email}`);
         console.log(`[${ts()}]   Facebook page: ${url}`);
 
-        // Save email to database
+        // Save email + facebook_url to database
         const { error: updateErr } = await supabase
           .from("pineyweb_prospects")
-          .update({ email, email_source: "Facebook" })
+          .update({ email, email_source: "Facebook", facebook_url: url })
           .eq("place_id", p.place_id);
 
         if (updateErr) {
@@ -314,7 +320,7 @@ async function main() {
         console.log(`[${ts()}]   ✗ Page found but no email: ${url}`);
         await supabase
           .from("pineyweb_prospects")
-          .update({ notes: "Facebook found, no email listed", contact_method: "facebook_message" })
+          .update({ notes: "Facebook found, no email listed", contact_method: "facebook_message", facebook_url: url })
           .eq("place_id", p.place_id);
         console.log(`[${ts()}]   Marked: Facebook found, no email listed`);
       } else {

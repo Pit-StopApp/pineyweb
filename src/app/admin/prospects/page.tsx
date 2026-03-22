@@ -8,7 +8,7 @@ import Link from "next/link";
 interface Prospect {
   id: string; place_id: string; business_name: string; city: string; phone: string | null;
   priority_tier: number; outreach_status: string; follow_up_date: string | null; notes: string | null;
-  email: string | null; email_source: string | null; emailed_at: string | null; contact_method: string | null; rating: number | null; review_count: number | null; email_delivered: boolean; email_spam: boolean; created_at: string; updated_at: string;
+  email: string | null; email_source: string | null; emailed_at: string | null; contact_method: string | null; rating: number | null; review_count: number | null; email_delivered: boolean; email_spam: boolean; facebook_url: string | null; created_at: string; updated_at: string;
 }
 
 const STATUSES = ["new", "contacted", "follow_up", "closed_won", "closed_lost"];
@@ -230,18 +230,19 @@ export default function ProspectsPage() {
         <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: "#f8f3eb", borderColor: "rgba(193,201,191,0.2)" }}>
           <table className="w-full text-left table-fixed">
             <colgroup>
-              <col style={{ width: "30%" }} />
+              <col style={{ width: "26%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "13%" }} />
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "8%" }} />
               <col style={{ width: "12%" }} />
               <col style={{ width: "14%" }} />
-              <col style={{ width: "8%" }} />
-              <col style={{ width: "14%" }} />
-              <col style={{ width: "10%" }} />
               <col style={{ width: "12%" }} />
             </colgroup>
             <thead>
               <tr className="text-[11px] uppercase tracking-[0.12em] font-bold border-b" style={{ color: "#414942", borderColor: "rgba(193,201,191,0.2)" }}>
-                {([["business_name", "Business Name"], ["city", "City"], ["_phone", "Phone"], ["priority_tier", "Priority"], ["outreach_status", "Status"], ["notes", "Notes"]] as const).map(([col, label]) => {
-                  const sortable = col !== "_phone";
+                {([["business_name", "Business Name"], ["city", "City"], ["_phone", "Phone"], ["_fb", "FB"], ["priority_tier", "Priority"], ["outreach_status", "Status"], ["notes", "Notes"]] as const).map(([col, label]) => {
+                  const sortable = col !== "_phone" && col !== "_fb";
                   return (
                     <th key={col} className={`py-4 px-3 first:pl-6${sortable ? " cursor-pointer select-none hover:text-[#316342]" : ""}`} onClick={sortable ? () => toggleSort(col) : undefined}>
                       {label}{sortCol === col ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
@@ -261,6 +262,13 @@ export default function ProspectsPage() {
                     </td>
                     <td className="py-3 px-3 text-sm truncate" style={{ color: "#414942" }}>{p.city || "—"}</td>
                     <td className="py-3 px-3 text-sm font-mono">{p.phone ? <a href={`tel:${p.phone}`} style={{ color: "#316342" }}>{p.phone}</a> : <span style={{ color: "#c1c9bf" }}>—</span>}</td>
+                    <td className="py-3 px-3 text-center">
+                      {p.facebook_url ? (
+                        <a href={p.facebook_url} target="_blank" rel="noopener noreferrer" title={p.facebook_url} className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-[#e7e2da] transition-colors">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                        </a>
+                      ) : <span style={{ color: "#c1c9bf" }}>—</span>}
+                    </td>
                     <td className="py-3 px-3">
                       <span className="px-2.5 py-1 rounded-full text-[10px] font-bold" style={p.priority_tier === 1 ? { backgroundColor: "rgba(253,195,154,0.4)", color: "#794e2e" } : { backgroundColor: "rgba(193,201,191,0.3)", color: "#717971" }}>T{p.priority_tier}</span>
                     </td>
@@ -299,7 +307,7 @@ export default function ProspectsPage() {
               })}
               {expandedNote && paginated.find(p => p.id === expandedNote) && (
                 <tr>
-                  <td colSpan={7} className="p-0">
+                  <td colSpan={8} className="p-0">
                     <div className="px-6 py-5 border-b" style={{ borderLeft: "4px solid #316342", borderColor: "rgba(193,201,191,0.15)", backgroundColor: "rgba(254,249,241,0.5)" }}>
                       <span className="text-[10px] uppercase tracking-widest font-bold mb-3 block" style={{ color: "#805533" }}>Interaction History &amp; Context</span>
                       <textarea
@@ -318,7 +326,7 @@ export default function ProspectsPage() {
                   </td>
                 </tr>
               )}
-              {paginated.length === 0 && <tr><td colSpan={7} className="py-16 text-center text-sm" style={{ color: "#414942" }}>No prospects found</td></tr>}
+              {paginated.length === 0 && <tr><td colSpan={8} className="py-16 text-center text-sm" style={{ color: "#414942" }}>No prospects found</td></tr>}
             </tbody>
           </table>
 
