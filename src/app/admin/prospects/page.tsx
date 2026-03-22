@@ -176,7 +176,7 @@ export default function ProspectsPage() {
     const XLSX = await import("xlsx");
     const rows = sorted.map(p => ({
       "Business Name": p.business_name,
-      "Address": (p as Record<string, unknown>).address || "",
+      "Address": (p as unknown as Record<string, unknown>).address || "",
       "City": p.city,
       "Phone": p.phone || "",
       "Website": p.website_url || "",
