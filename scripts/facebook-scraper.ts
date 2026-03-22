@@ -27,15 +27,21 @@ function isRedirectedToPersonalProfile(url: string): boolean {
 }
 
 // --- Clean email extraction ---
-function extractEmail(text: string): string | null {
-  const matches = text.match(/[a-zA-Z][a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
-  if (!matches) return null;
-  return matches.find(e =>
-    !e.includes('@facebook.com') &&
-    !e.includes('@fb.com') &&
-    !e.includes('@sentry') &&
-    e.length < 100
-  ) || null;
+function extractCleanEmail(text: string): string | null {
+  // Split text into words and find the one that looks like an email
+  const words = text.split(/[\s,;|<>()[\]{}'"]+/);
+  for (const word of words) {
+    const clean = word.trim();
+    if (/^[a-zA-Z][a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(clean)) {
+      if (!clean.includes('@facebook.com') &&
+          !clean.includes('@fb.com') &&
+          !clean.includes('@sentry') &&
+          clean.length < 100) {
+        return clean;
+      }
+    }
+  }
+  return null;
 }
 
 // --- Fuzzy matching with unique word requirement ---
@@ -162,7 +168,7 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
     const website = extractWebsiteUrl(mainText);
     if (website) console.log(`[${ts()}]   Website detected: ${website}`);
 
-    const mainEmail = extractEmail(mainText);
+    const mainEmail = extractCleanEmail(mainText);
     if (mainEmail) {
       console.log(`[${ts()}]   Email found on main page`);
       return { email: mainEmail, website };
@@ -174,7 +180,7 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
       const href = await link.getAttribute("href").catch(() => null);
       if (href) {
         const raw = href.replace("mailto:", "").split("?")[0];
-        const email = extractEmail(raw);
+        const email = extractCleanEmail(raw);
         if (email) {
           console.log(`[${ts()}]   Email found via mailto link`);
           return { email, website };
@@ -204,7 +210,7 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
     const contactWebsite = website || extractWebsiteUrl(contactText);
     if (contactWebsite && !website) console.log(`[${ts()}]   Website detected on contact page: ${contactWebsite}`);
 
-    const contactEmail = extractEmail(contactText);
+    const contactEmail = extractCleanEmail(contactText);
     if (contactEmail) {
       console.log(`[${ts()}]   Email found on contact info page`);
       return { email: contactEmail, website: contactWebsite };
