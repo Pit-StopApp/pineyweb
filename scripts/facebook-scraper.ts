@@ -250,7 +250,7 @@ async function main() {
 
   const { data: rawProspects, error } = await supabase
     .from("pineyweb_prospects")
-    .select("id, place_id, business_name, phone, city, rating, review_count, priority_tier, notes")
+    .select("id, place_id, business_name, phone, city, rating, review_count, priority_tier, notes, facebook_url")
     .is("email", null)
     .not("phone", "is", null)
     .gte("review_count", 5)
@@ -263,8 +263,8 @@ async function main() {
 
   // Filter out already-searched prospects client-side
   const prospects = rawProspects.filter(p =>
-    p.notes !== "No Facebook presence" &&
-    p.notes !== "Facebook found, no email listed"
+    !p.facebook_url &&
+    p.notes !== "No Facebook presence"
   ).slice(0, 5);
 
   if (prospects.length === 0) { console.log("All prospects already searched"); return; }
