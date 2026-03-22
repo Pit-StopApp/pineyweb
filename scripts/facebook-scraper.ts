@@ -254,8 +254,8 @@ async function main() {
     .is("email", null)
     .not("phone", "is", null)
     .gte("review_count", 5)
-    .not("notes", "ilike", "%No Facebook presence%")
-    .not("notes", "ilike", "%Facebook found, no email listed%")
+    .not("notes", "eq", "No Facebook presence")
+    .not("notes", "eq", "Facebook found, no email listed")
     .order("priority_tier", { ascending: true })
     .order("rating", { ascending: false })
     .limit(5);
@@ -331,7 +331,7 @@ async function main() {
 
     // Random delay 45-90 seconds between searches
     if (i < prospects.length - 1) {
-      await randomDelay(45000, 90000);
+      await randomDelay(31000, 57000);
     }
   }
 
