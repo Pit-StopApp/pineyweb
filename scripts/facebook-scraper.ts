@@ -296,26 +296,30 @@ async function searchFacebook(
   const candidates = await collectCandidates(page);
   console.log(`[${ts()}]   Found ${candidates.length} candidate page links`);
 
-  const result = await tryMatchCandidates(page, candidates, businessName, city, phone);
-  if (result.url) return result;
+  if (candidates.length > 0) {
+    const result = await tryMatchCandidates(page, candidates, businessName, city, phone);
+    if (result.url) return result;
+  }
 
-  // Retry with simplified name (first 3 words only)
-  const simplifiedName = businessName.split(/\s+/).slice(0, 3).join(" ");
-  if (simplifiedName !== businessName && simplifiedName.split(/\s+/).length >= 2) {
-    // Delay before retry
+  // Retry with simplified name (first 2-3 words, no city, no TX)
+  const words = businessName.split(/\s+/);
+  const simplifiedName = words.slice(0, Math.min(3, words.length)).join(" ");
+  if (simplifiedName.split(/\s+/).length >= 2) {
     const retryDelay = Math.floor(Math.random() * 10000) + 15000;
-    console.log(`[${ts()}]   No match. Waiting ${Math.round(retryDelay / 1000)}s before retry with: "${simplifiedName}"`);
+    console.log(`[${ts()}]   ${candidates.length === 0 ? "Zero results" : "No match"}. Waiting ${Math.round(retryDelay / 1000)}s before retry with: "${simplifiedName}"`);
     await page.waitForTimeout(retryDelay);
 
-    const retryQuery = humanizeQuery(simplifiedName, city);
-    const retryUrl = `https://www.facebook.com/search/pages/?q=${encodeURIComponent(retryQuery)}`;
-    console.log(`[${ts()}]   Retry searching: "${retryQuery}"`);
+    const retryUrl = `https://www.facebook.com/search/pages/?q=${encodeURIComponent(simplifiedName)}`;
+    console.log(`[${ts()}]   Retry searching: "${simplifiedName}"`);
     await page.goto(retryUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
     await page.waitForTimeout(5000);
 
     const retryCandidates = await collectCandidates(page);
-    const retryResult = await tryMatchCandidates(page, retryCandidates, simplifiedName, city, phone);
-    if (retryResult.url) return retryResult;
+    console.log(`[${ts()}]   Retry found ${retryCandidates.length} candidate page links`);
+    if (retryCandidates.length > 0) {
+      const retryResult = await tryMatchCandidates(page, retryCandidates, simplifiedName, city, phone);
+      if (retryResult.url) return retryResult;
+    }
   }
 
   console.log(`[${ts()}]   No matching Facebook page found`);
