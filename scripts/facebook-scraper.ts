@@ -977,6 +977,26 @@ async function main() {
             console.log(`[${ts()}]   ✓ Email saved to CRM`);
             const sent = await sendOutreach({ ...p, email });
             if (sent) { outreachSent++; emailSentThisRow = true; }
+
+            // Follow the business page after saving email
+            try {
+              const followBtn = page.locator('[aria-label="Follow"], [aria-label="Like"], [aria-label="Like Page"]').first();
+              const followVisible = await followBtn.isVisible().catch(() => false);
+              if (followVisible) {
+                const btnText = await followBtn.textContent().catch(() => "") || "";
+                const alreadyFollowing = /following|liked/i.test(btnText);
+                if (!alreadyFollowing) {
+                  const el = await followBtn.elementHandle();
+                  if (el) {
+                    await el.hover();
+                    await page.waitForTimeout(Math.floor(Math.random() * 500) + 500);
+                    await el.click();
+                    await page.waitForTimeout(Math.floor(Math.random() * 1000) + 1000);
+                    console.log(`[${ts()}]   👍 Followed ${p.business_name} page`);
+                  }
+                }
+              }
+            } catch { /* skip silently */ }
           }
         } else {
           // Unverified — mark for review, don't save email
