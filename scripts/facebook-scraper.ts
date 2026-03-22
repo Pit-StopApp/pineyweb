@@ -125,15 +125,16 @@ async function humanType(page: Page, selector: string, text: string) {
 }
 
 async function feedBreak(page: Page) {
-  console.log(`[${ts()}]   Taking a human break — checking feed`);
-  await page.goto("https://www.facebook.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
-  const waitTime = Math.floor(Math.random() * 10000) + 10000; // 10-20s
-  const scrollCount = Math.floor(waitTime / 3000);
-  for (let i = 0; i < scrollCount; i++) {
-    await humanScroll(page);
-    await page.waitForTimeout(Math.floor(Math.random() * 2000) + 1500);
+  console.log(`[${ts()}]   Taking a break — browsing Piney Web Co. page`);
+  try {
+    await page.goto("https://www.facebook.com/pineyweb", { waitUntil: "domcontentloaded", timeout: 30000 });
+    await browsePageNaturally(page, "Piney Web Co.", Math.floor(Math.random() * 10000) + 15000); // 15-25s
+  } catch {
+    // If page load fails, just pause instead
+    const pauseMs = Math.floor(Math.random() * 60000) + 120000; // 2-3 min
+    console.log(`[${ts()}]   Page load failed — pausing ${Math.round(pauseMs / 60000)}min instead`);
+    await page.waitForTimeout(pauseMs);
   }
-  await randomMouseMove(page);
 }
 
 function shuffleArray<T>(arr: T[]): T[] {
