@@ -246,7 +246,7 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
       return { email: mainEmail, website };
     }
 
-    // Check mailto links on main page — click like a human would
+    // Check mailto links on main page
     const mailtoLinks = await page.locator('a[href^="mailto:"]').all();
     for (const link of mailtoLinks) {
       const href = await link.getAttribute("href").catch(() => null);
@@ -254,13 +254,7 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
         const raw = href.replace("mailto:", "").split("?")[0];
         const email = extractCleanEmail(raw);
         if (email) {
-          console.log(`[${ts()}]   Email found via mailto link — clicking it`);
-          await link.hover().catch(() => {});
-          await page.waitForTimeout(Math.floor(Math.random() * 500) + 500);
-          await link.click().catch(() => {});
-          await page.waitForTimeout(Math.floor(Math.random() * 1000) + 1000);
-          await page.keyboard.press("Escape").catch(() => {});
-          await page.waitForTimeout(Math.floor(Math.random() * 500) + 300);
+          console.log(`[${ts()}]   Email found via mailto link`);
           return { email, website };
         }
       }
@@ -785,8 +779,12 @@ async function main() {
         console.log(`[${ts()}]   ✓ EMAIL FOUND: ${email}`);
         console.log(`[${ts()}]   Facebook page: ${url}`);
 
-        // Tiny pause before saving — feels natural
-        await page.waitForTimeout(Math.floor(Math.random() * 500) + 500);
+        // Lose focus — human switches away to write down the email
+        const focusLossMs = Math.floor(Math.random() * 20000) + 20000; // 20-40s
+        console.log(`[${ts()}]   Switching away for ${Math.round(focusLossMs / 1000)}s (writing down email)...`);
+        await page.keyboard.press("Meta+M");
+        await page.waitForTimeout(focusLossMs);
+        await page.bringToFront();
 
         const { error: updateErr } = await supabase
           .from("pineyweb_prospects")
