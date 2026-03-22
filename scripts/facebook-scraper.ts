@@ -27,17 +27,15 @@ function isRedirectedToPersonalProfile(url: string): boolean {
 }
 
 // --- Clean email extraction ---
-function extractCleanEmail(text: string): string | null {
-  const emailMatches = text.match(/(?<![a-zA-Z0-9._%+-])[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
-  const email = emailMatches ? emailMatches.find(e =>
-    !e.includes("@facebook.com") &&
-    !e.includes("@fb.com") &&
-    !e.includes("@sentry") &&
-    !e.includes("@fbcdn") &&
-    !e.includes("@example") &&
+function extractEmail(text: string): string | null {
+  const matches = text.match(/[a-zA-Z][a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
+  if (!matches) return null;
+  return matches.find(e =>
+    !e.includes('@facebook.com') &&
+    !e.includes('@fb.com') &&
+    !e.includes('@sentry') &&
     e.length < 100
-  ) : null;
-  return email || null;
+  ) || null;
 }
 
 // --- Fuzzy matching with unique word requirement ---
@@ -136,22 +134,38 @@ async function loadOrCreateSession(context: BrowserContext): Promise<void> {
   await page.close();
 }
 
+// --- Website detection ---
+const IGNORED_DOMAINS = ["facebook.com", "fb.com", "instagram.com", "messenger.com", "whatsapp.com", "twitter.com", "x.com", "tiktok.com", "youtube.com", "google.com", "apple.com", "play.google.com"];
+
+function extractWebsiteUrl(text: string): string | null {
+  const urlMatches = text.match(/https?:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}[^\s)"]*/g);
+  if (!urlMatches) return null;
+  for (const u of urlMatches) {
+    const domain = u.replace(/^https?:\/\//, "").split("/")[0].toLowerCase();
+    if (IGNORED_DOMAINS.some(d => domain.includes(d))) continue;
+    return u;
+  }
+  return null;
+}
+
 // --- Email extraction ---
-async function extractEmail(page: Page): Promise<string | null> {
+async function extractEmailFromPage(page: Page): Promise<{ email: string | null; website: string | null }> {
   try {
-    // Check for personal profile redirect
     if (isRedirectedToPersonalProfile(page.url())) {
       console.log(`[${ts()}]   Redirected to personal profile — skipping`);
-      return null;
+      return { email: null, website: null };
     }
 
     // Step 1: Scan the main page content
-    console.log(`[${ts()}]   Scanning main page for email...`);
+    console.log(`[${ts()}]   Scanning main page for email and website...`);
     const mainText = await page.textContent("body") || "";
-    const mainEmail = extractCleanEmail(mainText);
+    const website = extractWebsiteUrl(mainText);
+    if (website) console.log(`[${ts()}]   Website detected: ${website}`);
+
+    const mainEmail = extractEmail(mainText);
     if (mainEmail) {
       console.log(`[${ts()}]   Email found on main page`);
-      return mainEmail;
+      return { email: mainEmail, website };
     }
 
     // Check mailto links on main page
@@ -160,10 +174,10 @@ async function extractEmail(page: Page): Promise<string | null> {
       const href = await link.getAttribute("href").catch(() => null);
       if (href) {
         const raw = href.replace("mailto:", "").split("?")[0];
-        const email = extractCleanEmail(raw);
+        const email = extractEmail(raw);
         if (email) {
           console.log(`[${ts()}]   Email found via mailto link`);
-          return email;
+          return { email, website };
         }
       }
     }
@@ -172,7 +186,7 @@ async function extractEmail(page: Page): Promise<string | null> {
     const currentUrl = page.url();
     if (currentUrl.includes("profile.php?id=")) {
       console.log(`[${ts()}]   Profile-style page — skipping contact info navigation`);
-      return null;
+      return { email: null, website };
     }
 
     const contactUrl = currentUrl.replace(/\/$/, "") + "/directory_contact_info";
@@ -180,22 +194,27 @@ async function extractEmail(page: Page): Promise<string | null> {
     await page.goto(contactUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
     await page.waitForTimeout(3000);
 
-    // Check for redirect to personal profile
     if (isRedirectedToPersonalProfile(page.url())) {
       console.log(`[${ts()}]   Redirected to personal profile — skipping`);
-      return null;
+      return { email: null, website };
     }
 
     const contactText = await page.textContent("body") || "";
-    const contactEmail = extractCleanEmail(contactText);
+    // Check contact page for website too if not found on main page
+    const contactWebsite = website || extractWebsiteUrl(contactText);
+    if (contactWebsite && !website) console.log(`[${ts()}]   Website detected on contact page: ${contactWebsite}`);
+
+    const contactEmail = extractEmail(contactText);
     if (contactEmail) {
       console.log(`[${ts()}]   Email found on contact info page`);
-      return contactEmail;
+      return { email: contactEmail, website: contactWebsite };
     }
+
+    return { email: null, website: contactWebsite };
   } catch (err) {
     console.log(`[${ts()}]   Error extracting email: ${err instanceof Error ? err.message : err}`);
   }
-  return null;
+  return { email: null, website: null };
 }
 
 function phoneDigits(phone: string): string {
@@ -239,7 +258,7 @@ async function tryMatchCandidates(
   matchName: string,
   city: string,
   phone: string | null
-): Promise<{ url: string | null; email: string | null }> {
+): Promise<{ url: string | null; email: string | null; website: string | null }> {
   // Log top candidates for debugging
   for (const { text } of candidates.slice(0, 5)) {
     const isMatch = fuzzyMatch(text, matchName, city);
@@ -253,10 +272,9 @@ async function tryMatchCandidates(
       await page.goto(href, { waitUntil: "domcontentloaded", timeout: 15000 });
       await page.waitForTimeout(2000);
 
-      // Check for redirect to personal profile
       if (isRedirectedToPersonalProfile(page.url())) {
         console.log(`[${ts()}]   Redirected to personal profile — skipping`);
-        return { url: null, email: null };
+        return { url: null, email: null, website: null };
       }
 
       const phoneOk = await confirmPhoneMatch(page, phone);
@@ -266,12 +284,12 @@ async function tryMatchCandidates(
         console.log(`[${ts()}]   Phone mismatch but name/city match, proceeding`);
       }
 
-      const email = await extractEmail(page);
-      return { url: page.url(), email };
+      const { email, website } = await extractEmailFromPage(page);
+      return { url: page.url(), email, website };
     }
   }
 
-  return { url: null, email: null };
+  return { url: null, email: null, website: null };
 }
 
 // --- Main search function ---
@@ -280,7 +298,7 @@ async function searchFacebook(
   businessName: string,
   city: string,
   phone: string | null
-): Promise<{ url: string | null; email: string | null }> {
+): Promise<{ url: string | null; email: string | null; website: string | null }> {
   const humanQuery = humanizeQuery(businessName, city);
   const searchUrl = `https://www.facebook.com/search/pages/?q=${encodeURIComponent(humanQuery)}`;
 
@@ -290,7 +308,7 @@ async function searchFacebook(
 
   if (page.url().includes("/login")) {
     console.log(`[${ts()}]   Session expired — redirected to login`);
-    return { url: null, email: null };
+    return { url: null, email: null, website: null };
   }
 
   const candidates = await collectCandidates(page);
@@ -323,7 +341,7 @@ async function searchFacebook(
   }
 
   console.log(`[${ts()}]   No matching Facebook page found`);
-  return { url: null, email: null };
+  return { url: null, email: null, website: null };
 }
 
 // --- Outreach ---
@@ -417,7 +435,21 @@ async function main() {
     console.log(`\n[${ts()}] [${i + 1}/${prospects.length}] ${p.business_name} (${p.city}) — T${p.priority_tier}, ${p.rating}★, ${p.review_count} reviews`);
 
     try {
-      const { url, email } = await searchFacebook(page, p.business_name, p.city, p.phone);
+      const { url, email, website } = await searchFacebook(page, p.business_name, p.city, p.phone);
+
+      // If a website is found (not facebook/instagram), skip outreach
+      if (website) {
+        console.log(`[${ts()}]   Website found on Facebook page — skipping outreach`);
+        await supabase
+          .from("pineyweb_prospects")
+          .update({
+            notes: `Has website - found on Facebook: ${website}`,
+            outreach_status: "lost",
+            facebook_url: url || undefined,
+          })
+          .eq("place_id", p.place_id);
+        continue;
+      }
 
       if (email) {
         hits++;
