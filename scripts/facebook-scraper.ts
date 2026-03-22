@@ -506,22 +506,30 @@ async function main() {
 
   const { data: rawProspects, error } = await supabase
     .from("pineyweb_prospects")
-    .select("id, place_id, business_name, phone, city, rating, review_count, priority_tier, notes, facebook_url")
+    .select("*")
     .is("email", null)
     .not("phone", "is", null)
     .gte("review_count", 5)
-    .is("facebook_url", null)
-    .neq("notes", "No Facebook presence")
-    .neq("notes", "Facebook found, no email listed")
+    .or("facebook_url.is.null,facebook_url.eq.")
+    .or("notes.is.null,notes.neq.No Facebook presence")
     .order("priority_tier", { ascending: true })
     .order("rating", { ascending: false });
 
   if (error) { console.error("Supabase error:", error.message); process.exit(1); }
   if (!rawProspects || rawProspects.length === 0) { console.log("No prospects found"); return; }
 
-  const prospects = shuffleArray(rawProspects);
+  // Filter client-side for precise exclusion
+  const filtered = rawProspects.filter(p =>
+    !p.facebook_url &&
+    p.notes !== "No Facebook presence" &&
+    p.notes !== "Facebook found, no email listed"
+  );
 
-  console.log(`[${ts()}] Loaded ${prospects.length} prospects\n`);
+  if (filtered.length === 0) { console.log("All prospects already searched"); return; }
+
+  const prospects = shuffleArray(filtered);
+
+  console.log(`[${ts()}] Loaded ${prospects.length} prospects (from ${rawProspects.length} query results)\n`);
 
   const browser = await chromium.launch({
     headless: false,
