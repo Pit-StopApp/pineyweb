@@ -17,67 +17,71 @@ function ts(): string { return new Date().toLocaleTimeString(); }
 
 // --- Natural page browsing — active mouse + scroll for a duration ---
 async function browsePageNaturally(page: Page, businessName: string, durationMs?: number) {
-  const browseTime = durationMs ?? (Math.floor(Math.random() * 60000) + 30000); // 30-90s default
-  console.log(`[${ts()}]   Browsing ${businessName}'s page... (${Math.round(browseTime / 1000)}s)`);
-  const start = Date.now();
+  try {
+    const browseTime = durationMs ?? (Math.floor(Math.random() * 60000) + 30000); // 30-90s default
+    console.log(`[${ts()}]   Browsing ${businessName}'s page... (${Math.round(browseTime / 1000)}s)`);
+    const start = Date.now();
 
-  while (Date.now() - start < browseTime) {
-    // Scroll down through posts
-    const scrollAmount = Math.floor(Math.random() * 250) + 80;
-    await page.mouse.wheel(0, scrollAmount);
-    await page.waitForTimeout(Math.floor(Math.random() * 500) + 300);
+    while (Date.now() - start < browseTime) {
+      // Scroll down through posts
+      const scrollAmount = Math.floor(Math.random() * 250) + 80;
+      await page.mouse.wheel(0, scrollAmount);
+      await page.waitForTimeout(Math.floor(Math.random() * 500) + 300);
 
-    // Move mouse to a visible element — posts, photos, business name, like button
-    const targets = [
-      'img[src*="fbcdn"]', 'img[src*="scontent"]',         // photos
-      '[role="article"]', '[data-ad-preview="message"]',    // posts
-      'h1', 'h2',                                           // page name / headings
-      '[aria-label="Like"]', '[aria-label="Share"]',        // action buttons (hover only)
-    ];
-    const targetSelector = targets[Math.floor(Math.random() * targets.length)];
-    const targetEl = page.locator(targetSelector).first();
-    const isTargetVisible = await targetEl.isVisible().catch(() => false);
+      // Move mouse to a visible element — posts, photos, business name, like button
+      const targets = [
+        'img[src*="fbcdn"]', 'img[src*="scontent"]',         // photos
+        '[role="article"]', '[data-ad-preview="message"]',    // posts
+        'h1', 'h2',                                           // page name / headings
+        '[aria-label="Like"]', '[aria-label="Share"]',        // action buttons (hover only)
+      ];
+      const targetSelector = targets[Math.floor(Math.random() * targets.length)];
+      const targetEl = page.locator(targetSelector).first();
+      const isTargetVisible = await targetEl.isVisible().catch(() => false);
 
-    if (isTargetVisible) {
-      const box = await targetEl.boundingBox().catch(() => null);
-      if (box) {
-        // Move to element with slight offset for realism
-        const offsetX = Math.floor(Math.random() * Math.min(box.width, 100));
-        const offsetY = Math.floor(Math.random() * Math.min(box.height, 40));
-        await page.mouse.move(box.x + offsetX, box.y + offsetY);
+      if (isTargetVisible) {
+        const box = await targetEl.boundingBox().catch(() => null);
+        if (box) {
+          // Move to element with slight offset for realism
+          const offsetX = Math.floor(Math.random() * Math.min(box.width, 100));
+          const offsetY = Math.floor(Math.random() * Math.min(box.height, 40));
+          await page.mouse.move(box.x + offsetX, box.y + offsetY);
 
-        // Pause longer on images (2-4s), shorter on text (3-8s range overall)
-        const isImage = targetSelector.includes("img");
-        const pauseMs = isImage
-          ? Math.floor(Math.random() * 2000) + 2000   // 2-4s on photos
-          : Math.floor(Math.random() * 5000) + 3000;  // 3-8s on text/posts
-        await page.waitForTimeout(Math.min(pauseMs, browseTime - (Date.now() - start)));
+          // Pause longer on images (2-4s), shorter on text (3-8s range overall)
+          const isImage = targetSelector.includes("img");
+          const pauseMs = isImage
+            ? Math.floor(Math.random() * 2000) + 2000   // 2-4s on photos
+            : Math.floor(Math.random() * 5000) + 3000;  // 3-8s on text/posts
+          await page.waitForTimeout(Math.min(pauseMs, browseTime - (Date.now() - start)));
+        }
+      } else {
+        // No target found — move mouse to random position and short pause
+        await page.mouse.move(
+          Math.floor(Math.random() * 1000) + 150,
+          Math.floor(Math.random() * 500) + 150
+        );
+        await page.waitForTimeout(Math.floor(Math.random() * 1500) + 1000);
       }
-    } else {
-      // No target found — move mouse to random position and short pause
-      await page.mouse.move(
-        Math.floor(Math.random() * 1000) + 150,
-        Math.floor(Math.random() * 500) + 150
-      );
-      await page.waitForTimeout(Math.floor(Math.random() * 1500) + 1000);
-    }
 
-    // 25% chance scroll back up slightly
-    if (Math.random() < 0.25) {
-      await page.mouse.wheel(0, -(Math.floor(Math.random() * 120) + 40));
-      await page.mouse.move(
-        Math.floor(Math.random() * 1000) + 150,
-        Math.floor(Math.random() * 500) + 150
-      );
-      await page.waitForTimeout(Math.floor(Math.random() * 1000) + 500);
-    }
+      // 25% chance scroll back up slightly
+      if (Math.random() < 0.25) {
+        await page.mouse.wheel(0, -(Math.floor(Math.random() * 120) + 40));
+        await page.mouse.move(
+          Math.floor(Math.random() * 1000) + 150,
+          Math.floor(Math.random() * 500) + 150
+        );
+        await page.waitForTimeout(Math.floor(Math.random() * 1000) + 500);
+      }
 
-    // Move mouse between scrolls so it's never stationary too long
-    await page.mouse.move(
-      Math.floor(Math.random() * 1100) + 100,
-      Math.floor(Math.random() * 600) + 100
-    );
-    await page.waitForTimeout(Math.floor(Math.random() * 500) + 200);
+      // Move mouse between scrolls so it's never stationary too long
+      await page.mouse.move(
+        Math.floor(Math.random() * 1100) + 100,
+        Math.floor(Math.random() * 600) + 100
+      );
+      await page.waitForTimeout(Math.floor(Math.random() * 500) + 200);
+    }
+  } catch (err) {
+    console.log(`[${ts()}]   Browse interrupted: ${err instanceof Error ? err.message : err}`);
   }
 }
 
@@ -240,7 +244,27 @@ function humanizeQuery(businessName: string, city: string): string {
 }
 
 // --- Session management ---
-async function loadOrCreateSession(context: BrowserContext): Promise<void> {
+async function waitForLoggedIn(page: Page): Promise<void> {
+  console.log(`[${ts()}] Waiting for login...`);
+  await page.waitForFunction(() => {
+    const hasNav = document.querySelector('[aria-label="Facebook"]') !== null
+      || document.querySelector('[role="navigation"]') !== null
+      || document.querySelector('[aria-label="Your profile"]') !== null
+      || document.querySelector('[data-pagelet="Stories"]') !== null;
+    const notLogin = !window.location.pathname.includes("/login");
+    return hasNav && notLogin;
+  }, { timeout: 300000 });
+  console.log(`[${ts()}] Login detected.`);
+}
+
+async function saveCookies(context: BrowserContext): Promise<void> {
+  const sessionPath = path.resolve(SESSION_FILE);
+  const cookies = await context.cookies();
+  fs.writeFileSync(sessionPath, JSON.stringify(cookies, null, 2));
+  console.log(`[${ts()}] Saved ${cookies.length} cookies to ${sessionPath}`);
+}
+
+async function loadOrCreateSession(context: BrowserContext, page: Page): Promise<void> {
   const sessionPath = path.resolve(SESSION_FILE);
 
   if (fs.existsSync(sessionPath)) {
@@ -248,34 +272,36 @@ async function loadOrCreateSession(context: BrowserContext): Promise<void> {
     const cookies = JSON.parse(fs.readFileSync(sessionPath, "utf-8"));
     await context.addCookies(cookies);
     console.log(`[${ts()}] Loaded ${cookies.length} cookies`);
-    return;
+
+    // Validate session — check if actually logged in
+    console.log(`[${ts()}] Validating session...`);
+    await page.goto("https://www.facebook.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
+    await page.waitForTimeout(3000);
+
+    const isLoggedIn = await page.evaluate(() => {
+      const hasNav = document.querySelector('[aria-label="Facebook"]') !== null
+        || document.querySelector('[role="navigation"]') !== null
+        || document.querySelector('[aria-label="Your profile"]') !== null;
+      const notLogin = !window.location.pathname.includes("/login");
+      return hasNav && notLogin;
+    });
+
+    if (isLoggedIn) {
+      console.log(`[${ts()}] Session valid — logged in.`);
+      return;
+    }
+
+    console.log(`[${ts()}] Session expired — need to log in again.`);
+  } else {
+    console.log(`\n[${ts()}] No saved session found.`);
   }
 
-  console.log(`\n[${ts()}] No saved session found. Opening Facebook for manual login...`);
+  // Open login page and wait for auto-detection
+  console.log(`[${ts()}] Opening Facebook for manual login...`);
   console.log(`[${ts()}] Log in manually — session will be saved automatically once logged in.\n`);
-
-  const page = await context.newPage();
-  await page.goto("https://www.facebook.com/login");
-
-  // Wait for login to complete — detect logged-in state automatically
-  console.log(`[${ts()}] Waiting for login...`);
-  await page.waitForFunction(() => {
-    // Check for logged-in navigation elements
-    const hasNav = document.querySelector('[aria-label="Facebook"]') !== null
-      || document.querySelector('[role="navigation"]') !== null
-      || document.querySelector('[aria-label="Your profile"]') !== null
-      || document.querySelector('[data-pagelet="Stories"]') !== null;
-    // Check URL is no longer the login page
-    const notLogin = !window.location.pathname.includes("/login");
-    return hasNav && notLogin;
-  }, { timeout: 300000 });
-
-  console.log(`[${ts()}] Login detected — saving session...`);
-
-  const cookies = await context.cookies();
-  fs.writeFileSync(sessionPath, JSON.stringify(cookies, null, 2));
-  console.log(`[${ts()}] Saved ${cookies.length} cookies to ${sessionPath}`);
-  await page.close();
+  await page.goto("https://www.facebook.com/login", { waitUntil: "domcontentloaded", timeout: 30000 });
+  await waitForLoggedIn(page);
+  await saveCookies(context);
 }
 
 // --- Website detection ---
@@ -758,8 +784,8 @@ async function main() {
   });
   console.log(`[${ts()}] Viewport: ${vpWidth}x${vpHeight}`);
 
-  await loadOrCreateSession(context);
   const page = await context.newPage();
+  await loadOrCreateSession(context, page);
 
   // Human settling in after opening browser
   await page.waitForTimeout(Math.floor(Math.random() * 4000) + 3000);
@@ -1075,15 +1101,25 @@ async function main() {
 
     // Browse current page naturally between searches
     if (i < prospects.length - 1) {
-      await browsePageNaturally(page, p.business_name);
+      try {
+        await browsePageNaturally(page, p.business_name);
+      } catch (browseErr) {
+        console.log(`[${ts()}]   Browse error (non-fatal): ${browseErr instanceof Error ? browseErr.message : browseErr}`);
+      }
     }
   }
 
-  const cookies = await context.cookies();
-  fs.writeFileSync(path.resolve(SESSION_FILE), JSON.stringify(cookies, null, 2));
-  console.log(`\n[${ts()}] Session cookies saved.`);
+  try {
+    const cookies = await context.cookies();
+    fs.writeFileSync(path.resolve(SESSION_FILE), JSON.stringify(cookies, null, 2));
+    console.log(`\n[${ts()}] Session cookies saved.`);
+  } catch (err) {
+    console.log(`[${ts()}] Could not save session cookies: ${err instanceof Error ? err.message : err}`);
+  }
 
-  await browser.close();
+  try {
+    await browser.close();
+  } catch { /* browser may already be closed */ }
 
   saveReport();
 
