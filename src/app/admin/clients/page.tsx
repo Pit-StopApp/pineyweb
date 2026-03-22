@@ -29,6 +29,15 @@ export default function AdminClients() {
   const [sending, setSending] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const [page, setPage] = useState(0);
+  // Scanner clients
+  interface ScannerClient { id: string; client_id: string; name: string; scanner_type: string | null; geography: string | null; status: string; last_run_at: string | null; total_leads: number; keywords: string[] | null; business_types: string[] | null; google_sheet_url: string | null; }
+  const [scannerClients, setScannerClients] = useState<ScannerClient[]>([]);
+  const [scanModal, setScanModal] = useState<ScannerClient | null>(null);
+  const [scanCity, setScanCity] = useState("");
+  const [scanRadius, setScanRadius] = useState(25);
+  const [scanMaxResults, setScanMaxResults] = useState(100);
+  const [scanRunning, setScanRunning] = useState(false);
+  const [scanProgress, setScanProgress] = useState("");
   // Handoff modal
   const [handoffClient, setHandoffClient] = useState<Client | null>(null);
   const [handoffGithub, setHandoffGithub] = useState("");
@@ -45,6 +54,8 @@ export default function AdminClients() {
       setAdminName(me.full_name || "Admin");
       const { data } = await supabase.from("pineyweb_clients").select("*").order("created_at", { ascending: false });
       setClients((data || []) as Client[]);
+      const { data: sc } = await supabase.from("pineyweb_scanner_clients").select("*").order("created_at", { ascending: false });
+      setScannerClients((sc || []) as ScannerClient[]);
       setLoading(false);
     };
     init();
@@ -98,7 +109,6 @@ export default function AdminClients() {
         <nav className="hidden md:flex items-center gap-8">
           <Link href="/dashboard" className="text-sm tracking-wide uppercase" style={{ color: "#414942", opacity: 0.7 }}>Dashboard</Link>
           <Link href="/admin/clients" className="text-sm tracking-wide uppercase font-bold" style={{ color: "#316342" }}>Clients</Link>
-          <Link href="/admin/scanner" className="text-sm tracking-wide uppercase" style={{ color: "#414942", opacity: 0.7 }}>Scanner</Link>
           <Link href="/admin/prospects" className="text-sm tracking-wide uppercase" style={{ color: "#414942", opacity: 0.7 }}>Prospects</Link>
           <Link href="/admin/queue" className="text-sm tracking-wide uppercase" style={{ color: "#414942", opacity: 0.7 }}>Queue</Link>
         </nav>
@@ -244,7 +254,117 @@ export default function AdminClients() {
             </button>
           </div>
         </div>
+
+        {/* Lead Generation */}
+        <div className="mt-16 mb-10">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <span className="inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-3" style={{ backgroundColor: "rgba(49,99,66,0.1)", color: "#316342" }}>Lead Generation</span>
+              <h2 className="text-2xl font-bold tracking-tight" style={{ color: "#1d1c17" }}>Client Scanners</h2>
+            </div>
+          </div>
+
+          {scannerClients.length === 0 ? (
+            <div className="rounded-xl border p-12 text-center" style={{ backgroundColor: "#f8f3eb", borderColor: "rgba(193,201,191,0.2)" }}>
+              <span className="material-symbols-outlined text-5xl mb-4 block" style={{ color: "#c1c9bf" }}>precision_manufacturing</span>
+              <p className="text-lg font-bold mb-2" style={{ color: "#1d1c17" }}>No scanner clients yet</p>
+              <p className="text-sm mb-6" style={{ color: "#414942" }}>Add a scanner configuration for a client to start generating leads.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              {scannerClients.map(sc => {
+                const client = clients.find(c => c.id === sc.client_id);
+                return (
+                  <div key={sc.id} className="rounded-xl border p-6 transition-colors hover:bg-[#f2ede5]" style={{ backgroundColor: "#f8f3eb", borderColor: "rgba(193,201,191,0.2)" }}>
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: "rgba(193,201,191,0.3)" }}>
+                        <span className="material-symbols-outlined text-[18px]" style={{ color: "#805533" }}>foundation</span>
+                      </div>
+                      <div>
+                        <h3 className="font-bold" style={{ color: "#1d1c17" }}>{sc.name}</h3>
+                        <span className="text-[10px] uppercase tracking-widest font-bold" style={{ color: sc.status === "active" ? "#4A7C59" : "#717971" }}>{sc.status}</span>
+                      </div>
+                    </div>
+                    <div className="space-y-2 mb-4 text-sm">
+                      {sc.scanner_type && <div><span style={{ color: "#717971" }}>Type:</span> <span style={{ color: "#414942" }}>{sc.scanner_type}</span></div>}
+                      {sc.geography && <div><span style={{ color: "#717971" }}>Geography:</span> <span style={{ color: "#414942" }}>{sc.geography}</span></div>}
+                      <div className="flex justify-between pt-2 border-t" style={{ borderColor: "rgba(193,201,191,0.15)" }}>
+                        <div><span className="text-[10px] uppercase tracking-widest" style={{ color: "#717971" }}>Last Run</span><br/><span style={{ color: "#414942" }}>{sc.last_run_at ? new Date(sc.last_run_at).toLocaleDateString() : "Never"}</span></div>
+                        <div className="text-right"><span className="text-[10px] uppercase tracking-widest" style={{ color: "#717971" }}>Total Leads</span><br/><span className="font-bold text-lg" style={{ color: "#316342" }}>{sc.total_leads.toLocaleString()}</span></div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => { setScanModal(sc); setScanCity(sc.geography || ""); setScanProgress(""); }} className="flex-1 py-2 rounded-md text-xs font-bold text-white" style={{ backgroundColor: "#316342" }}>Run Scanner</button>
+                      {sc.google_sheet_url && <a href={sc.google_sheet_url} target="_blank" rel="noopener noreferrer" className="flex-1 py-2 rounded-md text-xs font-bold text-center border" style={{ color: "#316342", borderColor: "#316342" }}>View Leads</a>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </main>
+
+      {/* Scanner Run Modal */}
+      {scanModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }} onClick={() => !scanRunning && setScanModal(null)}>
+          <div className="w-full max-w-lg rounded-xl shadow-xl overflow-hidden" style={{ backgroundColor: "#F5F0E8" }} onClick={e => e.stopPropagation()}>
+            <div className="px-6 pt-6 pb-3 border-b" style={{ borderColor: "rgba(193,201,191,0.2)" }}>
+              <span className="text-[10px] uppercase tracking-widest font-bold" style={{ color: "#805533" }}>Scanner Configuration</span>
+              <h3 className="text-2xl font-bold" style={{ color: "#316342" }}>{scanModal.name}</h3>
+            </div>
+            <div className="p-6 space-y-5">
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest font-bold mb-1" style={{ color: "#717971" }}>Target City / Zip</label>
+                <input value={scanCity} onChange={e => setScanCity(e.target.value)} className="w-full px-3 py-2 rounded-lg border text-sm" style={{ borderColor: "#c1c9bf", backgroundColor: "#fff" }} />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest font-bold mb-1" style={{ color: "#717971" }}>Search Radius</label>
+                <div className="flex items-center gap-4">
+                  <input type="range" min={10} max={100} value={scanRadius} onChange={e => setScanRadius(Number(e.target.value))} className="flex-grow" style={{ accentColor: "#316342" }} />
+                  <span className="font-bold w-14 text-right" style={{ color: "#1d1c17" }}>{scanRadius}mi</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest font-bold mb-1" style={{ color: "#717971" }}>Max Results</label>
+                <div className="flex items-center gap-4">
+                  <input type="range" min={10} max={500} step={10} value={scanMaxResults} onChange={e => setScanMaxResults(Number(e.target.value))} className="flex-grow" style={{ accentColor: "#805533" }} />
+                  <span className="font-bold w-14 text-right" style={{ color: "#1d1c17" }}>{scanMaxResults}</span>
+                </div>
+              </div>
+              {scanProgress && (
+                <div className="text-sm italic" style={{ color: "#316342" }}>{scanProgress}</div>
+              )}
+            </div>
+            <div className="px-6 py-4 flex justify-end gap-3" style={{ backgroundColor: "#f8f3eb" }}>
+              <button onClick={() => setScanModal(null)} disabled={scanRunning} className="px-5 py-2.5 text-sm font-bold" style={{ color: "#414942" }}>Cancel</button>
+              <button
+                onClick={async () => {
+                  setScanRunning(true);
+                  setScanProgress("Scanning...");
+                  try {
+                    const res = await fetch("/api/admin/client-scanner", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ client_id: scanModal.client_id, city: scanCity, radius: scanRadius, max_results: scanMaxResults, keywords: scanModal.keywords || [], business_types: scanModal.business_types || [] }),
+                    });
+                    const data = await res.json();
+                    setScanProgress(`Complete — ${data.total || 0} leads found`);
+                    const { data: sc } = await supabase.from("pineyweb_scanner_clients").select("*").order("created_at", { ascending: false });
+                    setScannerClients((sc || []) as ScannerClient[]);
+                  } catch { setScanProgress("Scan failed"); }
+                  setScanRunning(false);
+                }}
+                disabled={scanRunning || !scanCity.trim()}
+                className="px-6 py-2.5 rounded-md text-sm font-bold text-white transition-all disabled:opacity-40"
+                style={{ backgroundColor: "#316342" }}
+              >
+                {scanRunning ? "Generating..." : "Generate Leads"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Handoff Modal */}
       {handoffClient && (() => {

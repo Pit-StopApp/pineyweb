@@ -38,6 +38,11 @@ export default function ProspectsPage() {
   const [adminName, setAdminName] = useState("Admin");
   const [enriching, setEnriching] = useState(false);
   const [enrichProgress, setEnrichProgress] = useState("");
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanCity, setScanCity] = useState("");
+  const [scanRadius, setScanRadius] = useState("25");
+  const [scanning, setScanning] = useState(false);
+  const [scanResult, setScanResult] = useState("");
   const [sending, setSending] = useState(false);
   const [sendProgress, setSendProgress] = useState("");
   const [showSendConfirm, setShowSendConfirm] = useState(false);
@@ -140,6 +145,28 @@ export default function ProspectsPage() {
     setTimeout(() => setSendProgress(""), 5000);
   };
 
+  const runScan = async () => {
+    if (!scanCity.trim()) return;
+    setScanning(true);
+    setScanResult("Scanning...");
+    try {
+      const res = await fetch("/api/admin/scanner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ city: scanCity.trim(), state: "TX", radius: Number(scanRadius) }),
+      });
+      const data = await res.json();
+      const newCount = data.prospects_saved || 0;
+      const existingCount = data.duplicates_skipped || 0;
+      setScanResult(`${newCount} new prospects found, ${existingCount} already existed`);
+      await loadProspects(filter);
+    } catch {
+      setScanResult("Scan failed — check console");
+    }
+    setScanning(false);
+    setTimeout(() => setScanResult(""), 8000);
+  };
+
   if (loading) return <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#fef9f1" }}><p style={{ color: "#414942" }}>Loading...</p></div>;
 
   const filtered = prospects.filter(p => {
@@ -179,7 +206,6 @@ export default function ProspectsPage() {
           <nav className="hidden md:flex items-center gap-8 text-sm">
             <Link href="/dashboard" style={{ color: "#414942" }}>Dashboard</Link>
             <Link href="/admin/clients" style={{ color: "#414942" }}>Clients</Link>
-            <Link href="/admin/scanner" style={{ color: "#414942" }}>Scanner</Link>
             <span className="font-semibold pb-1" style={{ color: "#316342", borderBottom: "2px solid #316342" }}>Prospects</span>
             <Link href="/admin/queue" style={{ color: "#414942" }}>Queue</Link>
           </nav>
@@ -202,6 +228,40 @@ export default function ProspectsPage() {
             <input value={search} onChange={e => { setSearch(e.target.value); setPage(0); }} placeholder="Search by name or city..." className="pl-10 pr-4 py-2.5 rounded-lg border text-sm w-64" style={{ borderColor: "#c1c9bf", backgroundColor: "#ffffff" }} />
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px]" style={{ color: "#c1c9bf" }}>search</span>
           </div>
+        </div>
+
+        {/* Run Scanner Panel */}
+        <div className="mb-6 rounded-xl border overflow-hidden" style={{ backgroundColor: "#f8f3eb", borderColor: "rgba(193,201,191,0.2)" }}>
+          <button onClick={() => setScannerOpen(!scannerOpen)} className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-[#f2ede5] transition-colors">
+            <div className="flex items-center gap-3">
+              <span className="material-symbols-outlined text-[20px]" style={{ color: "#316342" }}>radar</span>
+              <span className="text-sm font-bold" style={{ color: "#316342" }}>Run Scanner</span>
+            </div>
+            <span className="material-symbols-outlined text-[18px]" style={{ color: "#717971" }}>{scannerOpen ? "expand_less" : "expand_more"}</span>
+          </button>
+          {scannerOpen && (
+            <div className="px-6 pb-5 flex flex-wrap items-end gap-4 border-t" style={{ borderColor: "rgba(193,201,191,0.15)" }}>
+              <div className="pt-4">
+                <label className="block text-[10px] uppercase tracking-widest font-bold mb-1" style={{ color: "#805533" }}>City / Zip</label>
+                <input value={scanCity} onChange={e => setScanCity(e.target.value)} placeholder="e.g. Tyler, TX" className="px-3 py-2 rounded-lg border text-sm w-48" style={{ borderColor: "#c1c9bf", backgroundColor: "#fff" }} />
+              </div>
+              <div className="pt-4">
+                <label className="block text-[10px] uppercase tracking-widest font-bold mb-1" style={{ color: "#805533" }}>Radius</label>
+                <select value={scanRadius} onChange={e => setScanRadius(e.target.value)} className="px-3 py-2 rounded-lg border text-sm" style={{ borderColor: "#c1c9bf", backgroundColor: "#fff" }}>
+                  <option value="10">10 mi</option>
+                  <option value="25">25 mi</option>
+                  <option value="50">50 mi</option>
+                  <option value="100">100 mi</option>
+                </select>
+              </div>
+              <div className="pt-4">
+                <button onClick={runScan} disabled={scanning || !scanCity.trim()} className="px-5 py-2 rounded-md text-sm font-bold text-white transition-all disabled:opacity-40" style={{ backgroundColor: "#316342" }}>
+                  {scanning ? "Scanning..." : "Scan Now"}
+                </button>
+              </div>
+              {scanResult && <span className="text-sm italic pt-4" style={{ color: "#316342" }}>{scanResult}</span>}
+            </div>
+          )}
         </div>
 
         {/* Enrichment + Bulk Send */}

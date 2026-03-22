@@ -174,8 +174,8 @@ export default function QueuePage() {
         <div className="flex justify-between items-center px-8 py-4 max-w-screen-2xl mx-auto">
           <Link href="/dashboard" className="text-2xl font-bold tracking-tighter" style={{ color: "#316342" }}>Piney Web Co.</Link>
           <nav className="hidden md:flex items-center gap-8 text-sm">
+            <Link href="/dashboard" style={{ color: "#414942" }}>Dashboard</Link>
             <Link href="/admin/clients" style={{ color: "#414942" }}>Clients</Link>
-            <Link href="/admin/scanner" style={{ color: "#414942" }}>Scanner</Link>
             <Link href="/admin/prospects" style={{ color: "#414942" }}>Prospects</Link>
             <span className="font-semibold pb-1" style={{ color: "#316342", borderBottom: "2px solid #316342" }}>Queue</span>
           </nav>
