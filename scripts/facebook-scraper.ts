@@ -41,10 +41,14 @@ async function randomMouseMove(page: Page) {
 }
 
 async function humanType(page: Page, selector: string, text: string) {
+  // Before clicking search bar
+  await page.waitForTimeout(Math.floor(Math.random() * 1000) + 1000);
   await page.click(selector);
   for (const char of text) {
-    await page.keyboard.type(char, { delay: Math.floor(Math.random() * 100) + 50 });
+    await page.keyboard.type(char, { delay: Math.floor(Math.random() * 70) + 80 });
   }
+  // After finishing typing, human reviews query before pressing Enter
+  await page.waitForTimeout(Math.floor(Math.random() * 2000) + 1000);
 }
 
 async function feedBreak(page: Page) {
@@ -244,8 +248,11 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
 
     const contactUrl = currentUrl.replace(/\/$/, "") + "/directory_contact_info";
     console.log(`[${ts()}]   No email on main page, trying: ${contactUrl}`);
+    // Before navigating to contact info
+    await page.waitForTimeout(Math.floor(Math.random() * 2000) + 1000);
     await page.goto(contactUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
-    await page.waitForTimeout(3000);
+    // Human reads contact info page
+    await page.waitForTimeout(Math.floor(Math.random() * 2000) + 2000);
     await randomScroll(page);
 
     if (isRedirectedToPersonalProfile(page.url())) {
@@ -323,9 +330,16 @@ async function tryMatchCandidates(
     if (fuzzyMatch(text, matchName, city)) {
       console.log(`[${ts()}]   Matched: "${text}"`);
 
+      // Before clicking result
+      await page.waitForTimeout(Math.floor(Math.random() * 1000) + 1000);
       await page.goto(href, { waitUntil: "domcontentloaded", timeout: 15000 });
-      await page.waitForTimeout(2000);
+      // Human reads the business page
+      await page.waitForTimeout(Math.floor(Math.random() * 3000) + 2000);
+      // Before scrolling
+      await page.waitForTimeout(Math.floor(Math.random() * 1000) + 1000);
       await randomScroll(page);
+      // After scrolling, before extracting
+      await page.waitForTimeout(Math.floor(Math.random() * 1000) + 1000);
       await randomMouseMove(page);
 
       if (isRedirectedToPersonalProfile(page.url())) {
@@ -358,9 +372,12 @@ async function searchFacebook(
   const humanQuery = humanizeQuery(businessName, city);
   const searchUrl = `https://www.facebook.com/search/pages/?q=${encodeURIComponent(humanQuery)}`;
 
+  // Before navigating to search
+  await page.waitForTimeout(Math.floor(Math.random() * 2000) + 1000);
   console.log(`[${ts()}]   Searching Facebook: "${humanQuery}"`);
   await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
-  await page.waitForTimeout(5000);
+  // Human reads the page after it loads
+  await page.waitForTimeout(Math.floor(Math.random() * 2000) + 2000);
   await randomScroll(page);
   await randomMouseMove(page);
 
@@ -369,6 +386,8 @@ async function searchFacebook(
     return { url: null, email: null, website: null };
   }
 
+  // Human scans search results
+  await page.waitForTimeout(Math.floor(Math.random() * 2000) + 2000);
   const candidates = await collectCandidates(page);
   console.log(`[${ts()}]   Found ${candidates.length} candidate page links`);
 
@@ -388,9 +407,12 @@ async function searchFacebook(
     const retryUrl = `https://www.facebook.com/search/pages/?q=${encodeURIComponent(simplifiedName)}`;
     console.log(`[${ts()}]   Retry searching: "${simplifiedName}"`);
     await page.goto(retryUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
-    await page.waitForTimeout(5000);
+    // Human reads retry results
+    await page.waitForTimeout(Math.floor(Math.random() * 2000) + 2000);
     await randomScroll(page);
     await randomMouseMove(page);
+    // Human scans retry results
+    await page.waitForTimeout(Math.floor(Math.random() * 2000) + 2000);
 
     const retryCandidates = await collectCandidates(page);
     console.log(`[${ts()}]   Retry found ${retryCandidates.length} candidate page links`);
@@ -492,6 +514,9 @@ async function main() {
   await loadOrCreateSession(context);
   const page = await context.newPage();
 
+  // Human settling in after opening browser
+  await page.waitForTimeout(Math.floor(Math.random() * 4000) + 3000);
+
   let hits = 0;
   let emailsSent = 0;
   const feedBreakInterval = Math.floor(Math.random() * 5) + 8; // every 8-12 prospects
@@ -533,6 +558,9 @@ async function main() {
         hits++;
         console.log(`[${ts()}]   ✓ EMAIL FOUND: ${email}`);
         console.log(`[${ts()}]   Facebook page: ${url}`);
+
+        // Tiny pause before saving — feels natural
+        await page.waitForTimeout(Math.floor(Math.random() * 500) + 500);
 
         const { error: updateErr } = await supabase
           .from("pineyweb_prospects")
