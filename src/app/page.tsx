@@ -502,7 +502,7 @@ function Portfolio() {
   const projects = [
     {
       name: "PitStop",
-      desc: "On-demand auto parts delivery marketplace connecting customers, vendors, and drivers across East Texas.",
+      desc: "On-demand auto parts delivery marketplace connecting customers, vendors, and drivers across Texas.",
       image: "",
       video: "https://www.youtube.com/embed/zbmlKLecixk?si=PBdqf-m_7CMaP4L7",
       url: "https://orderpitstop.com",
@@ -511,7 +511,7 @@ function Portfolio() {
     },
     {
       name: "Sip Society",
-      desc: "Mobile bartending LLC serving East Texas events, weddings, and private parties.",
+      desc: "Mobile bartending LLC serving events, weddings, and private parties.",
       image: "/sipsociety.png",
       url: "https://sipsociety.social",
       tags: ["Local Business", "Mobile Bar", "East Texas"],
