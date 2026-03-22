@@ -252,19 +252,25 @@ async function loadOrCreateSession(context: BrowserContext): Promise<void> {
   }
 
   console.log(`\n[${ts()}] No saved session found. Opening Facebook for manual login...`);
-  console.log(`[${ts()}] Log in to Facebook manually, then press Enter in this terminal.\n`);
+  console.log(`[${ts()}] Log in manually — session will be saved automatically once logged in.\n`);
 
   const page = await context.newPage();
   await page.goto("https://www.facebook.com/login");
-  await page.waitForURL("**/facebook.com/**", { timeout: 300000 }).catch(() => {});
 
-  await new Promise<void>(resolve => {
-    process.stdin.resume();
-    process.stdin.once("data", () => {
-      process.stdin.pause();
-      resolve();
-    });
-  });
+  // Wait for login to complete — detect logged-in state automatically
+  console.log(`[${ts()}] Waiting for login...`);
+  await page.waitForFunction(() => {
+    // Check for logged-in navigation elements
+    const hasNav = document.querySelector('[aria-label="Facebook"]') !== null
+      || document.querySelector('[role="navigation"]') !== null
+      || document.querySelector('[aria-label="Your profile"]') !== null
+      || document.querySelector('[data-pagelet="Stories"]') !== null;
+    // Check URL is no longer the login page
+    const notLogin = !window.location.pathname.includes("/login");
+    return hasNav && notLogin;
+  }, { timeout: 300000 });
+
+  console.log(`[${ts()}] Login detected — saving session...`);
 
   const cookies = await context.cookies();
   fs.writeFileSync(sessionPath, JSON.stringify(cookies, null, 2));
