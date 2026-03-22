@@ -446,6 +446,12 @@ Dustin Hartman <hello@pineyweb.com>
 2. Within batch: track seen emails, skip duplicates (first occurrence wins)
 3. On send success: update `emailed_at` on ALL rows matching that email address (handles multi-location businesses)
 
+**Important notes:**
+- Email deduplication is case-insensitive — all emails are lowercased before Set comparison
+- `emailed_at` is set immediately on successful send using `ilike` for case-insensitive matching
+- The `emailed_at` field is the source of truth for dedup, not the Resend webhook
+- If emails are sent outside the platform (e.g. manually or via Resend dashboard), backfill `emailed_at` in Supabase using a SQL UPDATE with the sent email addresses before running outreach again
+
 ### Delivery Webhook Tracking
 
 Resend fires webhooks to `POST /api/webhooks/resend`:
