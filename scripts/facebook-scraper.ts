@@ -164,20 +164,16 @@ function isRedirectedToPersonalProfile(url: string): boolean {
 
 // --- Clean email extraction ---
 function extractCleanEmail(text: string): string | null {
-  // Split text into words and find the one that looks like an email
-  const words = text.split(/[\s,;|<>()[\]{}'"]+/);
-  for (const word of words) {
-    const clean = word.trim();
-    if (/^[a-zA-Z][a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(clean)) {
-      if (!clean.includes('@facebook.com') &&
-          !clean.includes('@fb.com') &&
-          !clean.includes('@sentry') &&
-          clean.length < 100) {
-        return clean;
-      }
-    }
-  }
-  return null;
+  // Use regex with word boundaries to extract email from surrounding text
+  const regex = /\b[a-zA-Z][a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b/g;
+  const matches = text.match(regex);
+  if (!matches) return null;
+  return matches.find(e =>
+    !e.includes("@facebook.com") &&
+    !e.includes("@fb.com") &&
+    !e.includes("@sentry") &&
+    e.length < 100
+  ) || null;
 }
 
 // --- Fuzzy matching with unique word requirement ---
