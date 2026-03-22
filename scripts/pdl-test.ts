@@ -52,7 +52,7 @@ async function main() {
         // Also check founded_email, contact_email
         if (data.contact_email) emails.push(data.contact_email);
 
-        const unique = [...new Set(emails.filter(Boolean))];
+        const unique = Array.from(new Set(emails.filter(Boolean)));
         if (unique.length > 0) {
           hits++;
           console.log(`✓ ${p.business_name} (${p.city}) | ${p.phone} → ${unique.join(", ")}`);
