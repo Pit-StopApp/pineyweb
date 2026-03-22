@@ -15,10 +15,70 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 function ts(): string { return new Date().toLocaleTimeString(); }
 
-function randomDelay(minMs: number, maxMs: number): Promise<void> {
-  const ms = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
-  console.log(`[${ts()}]   Waiting ${Math.round(ms / 1000)}s...`);
-  return new Promise(r => setTimeout(r, ms));
+// --- Natural page browsing — active mouse + scroll for a duration ---
+async function browsePageNaturally(page: Page, businessName: string, durationMs?: number) {
+  const browseTime = durationMs ?? (Math.floor(Math.random() * 60000) + 30000); // 30-90s default
+  console.log(`[${ts()}]   Browsing ${businessName}'s page... (${Math.round(browseTime / 1000)}s)`);
+  const start = Date.now();
+
+  while (Date.now() - start < browseTime) {
+    // Scroll down through posts
+    const scrollAmount = Math.floor(Math.random() * 250) + 80;
+    await page.mouse.wheel(0, scrollAmount);
+    await page.waitForTimeout(Math.floor(Math.random() * 500) + 300);
+
+    // Move mouse to a visible element — posts, photos, business name, like button
+    const targets = [
+      'img[src*="fbcdn"]', 'img[src*="scontent"]',         // photos
+      '[role="article"]', '[data-ad-preview="message"]',    // posts
+      'h1', 'h2',                                           // page name / headings
+      '[aria-label="Like"]', '[aria-label="Share"]',        // action buttons (hover only)
+    ];
+    const targetSelector = targets[Math.floor(Math.random() * targets.length)];
+    const targetEl = page.locator(targetSelector).first();
+    const isTargetVisible = await targetEl.isVisible().catch(() => false);
+
+    if (isTargetVisible) {
+      const box = await targetEl.boundingBox().catch(() => null);
+      if (box) {
+        // Move to element with slight offset for realism
+        const offsetX = Math.floor(Math.random() * Math.min(box.width, 100));
+        const offsetY = Math.floor(Math.random() * Math.min(box.height, 40));
+        await page.mouse.move(box.x + offsetX, box.y + offsetY);
+
+        // Pause longer on images (2-4s), shorter on text (3-8s range overall)
+        const isImage = targetSelector.includes("img");
+        const pauseMs = isImage
+          ? Math.floor(Math.random() * 2000) + 2000   // 2-4s on photos
+          : Math.floor(Math.random() * 5000) + 3000;  // 3-8s on text/posts
+        await page.waitForTimeout(Math.min(pauseMs, browseTime - (Date.now() - start)));
+      }
+    } else {
+      // No target found — move mouse to random position and short pause
+      await page.mouse.move(
+        Math.floor(Math.random() * 1000) + 150,
+        Math.floor(Math.random() * 500) + 150
+      );
+      await page.waitForTimeout(Math.floor(Math.random() * 1500) + 1000);
+    }
+
+    // 25% chance scroll back up slightly
+    if (Math.random() < 0.25) {
+      await page.mouse.wheel(0, -(Math.floor(Math.random() * 120) + 40));
+      await page.mouse.move(
+        Math.floor(Math.random() * 1000) + 150,
+        Math.floor(Math.random() * 500) + 150
+      );
+      await page.waitForTimeout(Math.floor(Math.random() * 1000) + 500);
+    }
+
+    // Move mouse between scrolls so it's never stationary too long
+    await page.mouse.move(
+      Math.floor(Math.random() * 1100) + 100,
+      Math.floor(Math.random() * 600) + 100
+    );
+    await page.waitForTimeout(Math.floor(Math.random() * 500) + 200);
+  }
 }
 
 async function humanScroll(page: Page) {
@@ -852,9 +912,9 @@ async function main() {
       if (tested % 25 === 0) saveReport();
     }
 
-    // Random delay 31-57 seconds between searches
+    // Browse current page naturally between searches
     if (i < prospects.length - 1) {
-      await randomDelay(31000, 57000);
+      await browsePageNaturally(page, p.business_name);
     }
   }
 
