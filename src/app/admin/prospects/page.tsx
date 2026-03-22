@@ -21,7 +21,8 @@ const STATUS_STYLES: Record<string, { bg: string; color: string; dot?: string }>
 };
 const STATUS_LABELS: Record<string, string> = { new: "New", contacted: "Contacted", follow_up: "Follow Up", closed_won: "Won", closed_lost: "Lost" };
 
-const PAGE_SIZES = [10, 50, 100, 500, 1000];
+const PAGE_SIZES = [10, 25, 50, 100];
+
 
 export default function ProspectsPage() {
   const router = useRouter();
@@ -31,7 +32,7 @@ export default function ProspectsPage() {
   const [expandedNote, setExpandedNote] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(50);
+  const [pageSize, setPageSize] = useState(25);
   const [adminName, setAdminName] = useState("Admin");
   const [enriching, setEnriching] = useState(false);
   const [enrichProgress, setEnrichProgress] = useState("");
@@ -193,9 +194,11 @@ export default function ProspectsPage() {
           <button onClick={runEnrichment} disabled={enriching || noEmailCount === 0} className="px-5 py-2.5 rounded-md text-sm font-bold border transition-all disabled:opacity-40" style={{ color: "#316342", borderColor: "#316342" }}>
             {enriching ? "Enriching..." : noEmailCount === 0 ? "All Enriched" : `Find Emails (${noEmailCount})`}
           </button>
-          <button onClick={() => setShowSendConfirm(true)} disabled={sending || readyToSendCount === 0} className="px-5 py-2.5 rounded-md text-sm font-bold text-white transition-all disabled:opacity-40" style={{ backgroundColor: "#316342" }}>
-            {sending ? "Sending..." : readyToSendCount === 0 ? "No Emails Ready" : `Send Cold Outreach (${readyToSendCount})`}
-          </button>
+          {(readyToSendCount > 0 || sending) && (
+            <button onClick={() => setShowSendConfirm(true)} disabled={sending} className="px-5 py-2.5 rounded-md text-sm font-bold text-white transition-all disabled:opacity-40" style={{ backgroundColor: "#316342" }}>
+              {sending ? "Sending..." : `Send Cold Outreach (${readyToSendCount})`}
+            </button>
+          )}
           {enrichProgress && <span className="text-sm italic" style={{ color: "#316342" }}>{enrichProgress}</span>}
           {sendProgress && <span className="text-sm italic" style={{ color: "#316342" }}>{sendProgress}</span>}
         </div>
@@ -225,87 +228,94 @@ export default function ProspectsPage() {
 
         {/* Table */}
         <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: "#f8f3eb", borderColor: "rgba(193,201,191,0.2)" }}>
-          <table className="w-full text-left">
+          <table className="w-full text-left table-fixed">
+            <colgroup>
+              <col style={{ width: "30%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "12%" }} />
+            </colgroup>
             <thead>
               <tr className="text-[11px] uppercase tracking-[0.12em] font-bold border-b" style={{ color: "#414942", borderColor: "rgba(193,201,191,0.2)" }}>
-                {([["business_name", "Business Name", "py-4 pl-6"], ["city", "City", "py-4"], ["_phone", "Phone", "py-4"], ["priority_tier", "Priority", "py-4"], ["outreach_status", "Status", "py-4"], ["follow_up_date", "Follow Up", "py-4"]] as const).map(([col, label, cls]) => {
+                {([["business_name", "Business Name"], ["city", "City"], ["_phone", "Phone"], ["priority_tier", "Priority"], ["outreach_status", "Status"], ["follow_up_date", "Follow Up"]] as const).map(([col, label]) => {
                   const sortable = col !== "_phone";
                   return (
-                    <th key={col} className={`${cls}${sortable ? " cursor-pointer select-none hover:text-[#316342]" : ""}`} onClick={sortable ? () => toggleSort(col) : undefined}>
+                    <th key={col} className={`py-4 px-3 first:pl-6${sortable ? " cursor-pointer select-none hover:text-[#316342]" : ""}`} onClick={sortable ? () => toggleSort(col) : undefined}>
                       {label}{sortCol === col ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
                     </th>
                   );
                 })}
-                <th className="py-4 text-right pr-6">Actions</th>
+                <th className="py-4 px-3 pr-6 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {paginated.map(p => {
                 const st = STATUS_STYLES[p.outreach_status] || STATUS_STYLES.new;
                 return (
-                  <tr key={p.id} className="group">
-                    <td colSpan={7} className="p-0">
-                      {/* Main Row */}
-                      <div className="flex items-center border-b transition-colors hover:bg-[#f2ede5]" style={{ borderColor: "rgba(193,201,191,0.08)" }}>
-                        <div className="py-4 pl-6 flex-1 min-w-0">
-                          <span className="font-semibold" style={{ color: "#1d1c17" }}>{p.business_name}</span>
-                        </div>
-                        <div className="py-4 w-32 text-sm" style={{ color: "#414942" }}>{p.city || "—"}</div>
-                        <div className="py-4 w-36 text-sm font-mono">{p.phone ? <a href={`tel:${p.phone}`} style={{ color: "#316342" }}>{p.phone}</a> : <span style={{ color: "#c1c9bf" }}>—</span>}</div>
-                        <div className="py-4 w-20">
-                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold" style={p.priority_tier === 1 ? { backgroundColor: "rgba(253,195,154,0.4)", color: "#794e2e" } : { backgroundColor: "rgba(193,201,191,0.3)", color: "#717971" }}>T{p.priority_tier}</span>
-                        </div>
-                        <div className="py-4 w-32 flex items-center gap-2">
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase" style={{ backgroundColor: st.bg, color: st.color }}>
-                            {st.dot && <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: st.dot }} />}
-                            {STATUS_LABELS[p.outreach_status] || p.outreach_status}
-                          </span>
-                          {p.email_spam && <span title="Marked as spam" style={{ fontSize: "14px" }}>⚠️</span>}
-                          {p.email_delivered && !p.email_spam && <span title="Email delivered" style={{ fontSize: "14px" }}>✅</span>}
-                        </div>
-                        <div className="py-4 w-28 text-sm" style={{ color: "#414942" }}>{p.follow_up_date || "—"}</div>
-                        <div className="py-4 w-32 text-right pr-6">
-                          <div className="flex gap-1 justify-end">
-                            <button onClick={() => {
-                              const next = STATUSES[(STATUSES.indexOf(p.outreach_status) + 1) % STATUSES.length];
-                              updateProspect(p.id, { outreach_status: next });
-                            }} title="Cycle status" className="w-8 h-8 rounded flex items-center justify-center transition-colors hover:bg-[#e7e2da]">
-                              <span className="material-symbols-outlined text-[18px]" style={{ color: "#316342" }}>rule</span>
-                            </button>
-                            <button onClick={() => setExpandedNote(expandedNote === p.id ? null : p.id)} title="Notes" className="w-8 h-8 rounded flex items-center justify-center transition-colors hover:bg-[#e7e2da]">
-                              <span className="material-symbols-outlined text-[18px]" style={{ color: p.notes ? "#805533" : "#c1c9bf" }}>notes</span>
-                            </button>
-                            <button onClick={() => {
-                              const d = prompt("Follow-up date (YYYY-MM-DD):", p.follow_up_date || "");
-                              if (d !== null) updateProspect(p.id, { follow_up_date: d || null });
-                            }} title="Set follow-up" className="w-8 h-8 rounded flex items-center justify-center transition-colors hover:bg-[#e7e2da]">
-                              <span className="material-symbols-outlined text-[18px]" style={{ color: "#414942" }}>event_repeat</span>
-                            </button>
-                          </div>
-                        </div>
+                  <tr key={p.id} className="border-b transition-colors hover:bg-[#f2ede5]" style={{ borderColor: "rgba(193,201,191,0.08)" }}>
+                    <td className="py-3 px-3 pl-6">
+                      <span className="font-semibold block truncate" style={{ color: "#1d1c17" }} title={p.business_name}>{p.business_name}</span>
+                    </td>
+                    <td className="py-3 px-3 text-sm truncate" style={{ color: "#414942" }}>{p.city || "—"}</td>
+                    <td className="py-3 px-3 text-sm font-mono">{p.phone ? <a href={`tel:${p.phone}`} style={{ color: "#316342" }}>{p.phone}</a> : <span style={{ color: "#c1c9bf" }}>—</span>}</td>
+                    <td className="py-3 px-3">
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold" style={p.priority_tier === 1 ? { backgroundColor: "rgba(253,195,154,0.4)", color: "#794e2e" } : { backgroundColor: "rgba(193,201,191,0.3)", color: "#717971" }}>T{p.priority_tier}</span>
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase" style={{ backgroundColor: st.bg, color: st.color }}>
+                        {st.dot && <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: st.dot }} />}
+                        {STATUS_LABELS[p.outreach_status] || p.outreach_status}
+                      </span>
+                      {p.email_spam && <span title="Marked as spam" className="ml-1" style={{ fontSize: "14px" }}>⚠️</span>}
+                      {p.email_delivered && !p.email_spam && <span title="Email delivered" className="ml-1" style={{ fontSize: "14px" }}>✅</span>}
+                    </td>
+                    <td className="py-3 px-3 text-sm" style={{ color: "#414942" }}>{p.follow_up_date || "—"}</td>
+                    <td className="py-3 px-3 pr-6 text-right">
+                      <div className="flex gap-1 justify-end">
+                        <button onClick={() => {
+                          const next = STATUSES[(STATUSES.indexOf(p.outreach_status) + 1) % STATUSES.length];
+                          updateProspect(p.id, { outreach_status: next });
+                        }} title="Cycle status" className="w-8 h-8 rounded flex items-center justify-center transition-colors hover:bg-[#e7e2da]">
+                          <span className="material-symbols-outlined text-[18px]" style={{ color: "#316342" }}>rule</span>
+                        </button>
+                        <button onClick={() => setExpandedNote(expandedNote === p.id ? null : p.id)} title="Notes" className="w-8 h-8 rounded flex items-center justify-center transition-colors hover:bg-[#e7e2da]">
+                          <span className="material-symbols-outlined text-[18px]" style={{ color: p.notes ? "#805533" : "#c1c9bf" }}>notes</span>
+                        </button>
+                        <button onClick={() => {
+                          const d = prompt("Follow-up date (YYYY-MM-DD):", p.follow_up_date || "");
+                          if (d !== null) updateProspect(p.id, { follow_up_date: d || null });
+                        }} title="Set follow-up" className="w-8 h-8 rounded flex items-center justify-center transition-colors hover:bg-[#e7e2da]">
+                          <span className="material-symbols-outlined text-[18px]" style={{ color: "#414942" }}>event_repeat</span>
+                        </button>
                       </div>
-                      {/* Expanded Note Row */}
-                      {expandedNote === p.id && (
-                        <div className="px-6 py-5 border-b" style={{ borderLeft: "4px solid #316342", borderColor: "rgba(193,201,191,0.15)", backgroundColor: "rgba(254,249,241,0.5)" }}>
-                          <span className="text-[10px] uppercase tracking-widest font-bold mb-3 block" style={{ color: "#805533" }}>Interaction History &amp; Context</span>
-                          <textarea
-                            defaultValue={p.notes || ""}
-                            onBlur={e => updateProspect(p.id, { notes: e.target.value })}
-                            placeholder="Add notes about this prospect..."
-                            className="w-full p-3 rounded-lg border text-sm resize-none mb-2"
-                            style={{ borderColor: "#c1c9bf", backgroundColor: "#ffffff" }}
-                            rows={3}
-                          />
-                          <div className="flex justify-between items-center">
-                            <span className="text-[10px] italic" style={{ color: "#717971" }}>Last edited: {p.updated_at ? new Date(p.updated_at).toLocaleString() : "Never"}</span>
-                            <button onClick={() => setExpandedNote(null)} className="px-4 py-1.5 rounded-md text-xs font-bold text-white" style={{ backgroundColor: "#316342" }}>Save Note</button>
-                          </div>
-                        </div>
-                      )}
                     </td>
                   </tr>
                 );
               })}
+              {expandedNote && paginated.find(p => p.id === expandedNote) && (
+                <tr>
+                  <td colSpan={7} className="p-0">
+                    <div className="px-6 py-5 border-b" style={{ borderLeft: "4px solid #316342", borderColor: "rgba(193,201,191,0.15)", backgroundColor: "rgba(254,249,241,0.5)" }}>
+                      <span className="text-[10px] uppercase tracking-widest font-bold mb-3 block" style={{ color: "#805533" }}>Interaction History &amp; Context</span>
+                      <textarea
+                        defaultValue={paginated.find(p => p.id === expandedNote)?.notes || ""}
+                        onBlur={e => updateProspect(expandedNote, { notes: e.target.value })}
+                        placeholder="Add notes about this prospect..."
+                        className="w-full p-3 rounded-lg border text-sm resize-none mb-2"
+                        style={{ borderColor: "#c1c9bf", backgroundColor: "#ffffff" }}
+                        rows={3}
+                      />
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] italic" style={{ color: "#717971" }}>Last edited: {paginated.find(p => p.id === expandedNote)?.updated_at ? new Date(paginated.find(p => p.id === expandedNote)!.updated_at).toLocaleString() : "Never"}</span>
+                        <button onClick={() => setExpandedNote(null)} className="px-4 py-1.5 rounded-md text-xs font-bold text-white" style={{ backgroundColor: "#316342" }}>Save Note</button>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )}
               {paginated.length === 0 && <tr><td colSpan={7} className="py-16 text-center text-sm" style={{ color: "#414942" }}>No prospects found</td></tr>}
             </tbody>
           </table>
