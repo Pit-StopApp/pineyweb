@@ -454,6 +454,41 @@ async function checkBusinessInactive(page: Page): Promise<{ inactive: boolean; r
   }
 }
 
+// --- AI match verification ---
+async function verifyMatch(
+  prospectName: string,
+  prospectCity: string,
+  prospectPhone: string | null,
+  facebookPageName: string,
+  facebookPhone: string | null,
+  facebookCity: string | null
+): Promise<{ verified: boolean; confidence: number; reason: string }> {
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY!,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 100,
+        messages: [{
+          role: "user",
+          content: `We were searching for a business called "${prospectName}" in ${prospectCity}, TX.\nWe found a Facebook page called "${facebookPageName}"${facebookCity ? ` located in ${facebookCity}` : ""}.\nProspect phone: ${prospectPhone || "unknown"}\nFacebook phone: ${facebookPhone || "unknown"}\n\nIs this the same business? Reply ONLY with valid JSON: {"verified": true/false, "confidence": 1-10, "reason": "brief explanation"}`,
+        }],
+      }),
+    });
+    const data = await response.json();
+    const text = data.content[0].text.trim();
+    return JSON.parse(text);
+  } catch (err) {
+    console.log(`[${ts()}]   Verification API error: ${err instanceof Error ? err.message : err}`);
+    return { verified: true, confidence: 5, reason: "verification failed — defaulting to save" };
+  }
+}
+
 // --- Collect candidates from current search results page ---
 async function collectCandidates(page: Page): Promise<{ text: string; href: string }[]> {
   const allLinks = await page.locator("a[href]").all();
@@ -695,6 +730,8 @@ async function main() {
     facebook_url: string;
     city: string;
     notes: string;
+    match_verified: string;
+    verification_reason: string;
   };
   const sessionRows: SessionRow[] = [];
   const reportsDir = path.resolve("scripts/session-reports");
@@ -703,7 +740,7 @@ async function main() {
   const sessionStart = new Date();
   const sessionDate = sessionStart.toISOString();
   const sessionId = `session-${sessionStart.toISOString().replace(/[:.]/g, "-").slice(0, 19)}`;
-  const CSV_HEADER = "session_date,session_id,prospect_name,facebook_page_found,match_type,phone_confirmed,email_found,email_sent,facebook_url,city,notes";
+  const CSV_HEADER = "session_date,session_id,prospect_name,facebook_page_found,match_type,phone_confirmed,email_found,email_sent,facebook_url,city,notes,match_verified,verification_reason";
 
   function csvEscape(val: string): string {
     if (val.includes(",") || val.includes('"') || val.includes("\n")) {
@@ -713,7 +750,7 @@ async function main() {
   }
 
   function rowToCsv(r: SessionRow): string {
-    return [r.session_date, r.session_id, r.prospect_name, r.facebook_page_found, r.match_type, r.phone_confirmed, r.email_found, r.email_sent, r.facebook_url, r.city, r.notes]
+    return [r.session_date, r.session_id, r.prospect_name, r.facebook_page_found, r.match_type, r.phone_confirmed, r.email_found, r.email_sent, r.facebook_url, r.city, r.notes, r.match_verified, r.verification_reason]
       .map(csvEscape)
       .join(",");
   }
@@ -811,6 +848,8 @@ async function main() {
       const { url, email, website, inactive, inactiveReason, matchType, phoneConfirmed, matchedPageName } = result;
       let rowNotes = "";
       let emailSentThisRow = false;
+      let matchVerified = "";
+      let verificationReason = "";
 
       // Dead business detection — skip outreach entirely
       if (inactive && url) {
@@ -844,26 +883,57 @@ async function main() {
         console.log(`[${ts()}]   ✓ EMAIL FOUND: ${email}`);
         console.log(`[${ts()}]   Facebook page: ${url}`);
 
-        // Lose focus — human switches away to write down the email
-        const focusLossMs = Math.floor(Math.random() * 20000) + 20000; // 20-40s
-        console.log(`[${ts()}]   Switching away for ${Math.round(focusLossMs / 1000)}s (writing down email)...`);
-        await page.keyboard.press("Meta+M");
-        await page.waitForTimeout(focusLossMs);
-        await page.bringToFront();
+        // Verify match — skip if phone already confirmed (high confidence)
+        let verified = true;
+        let confidence = 10;
+        let reason = "phone confirmed";
 
-        const { error: updateErr } = await supabase
-          .from("pineyweb_prospects")
-          .update({ email, email_source: "Facebook", facebook_url: url })
-          .eq("place_id", p.place_id);
+        if (!phoneConfirmed) {
+          console.log(`[${ts()}]   Verifying match with Claude AI...`);
+          const verification = await verifyMatch(p.business_name, p.city, p.phone, matchedPageName, null, null);
+          verified = verification.verified;
+          confidence = verification.confidence;
+          reason = verification.reason;
 
-        if (updateErr) {
-          console.log(`[${ts()}]   DB save failed: ${updateErr.message}`);
-          rowNotes = "db save failed";
-        } else {
-          emailsSaved++;
-          console.log(`[${ts()}]   ✓ Email saved — outreach pending review`);
+          if (verified && confidence >= 7) {
+            console.log(`[${ts()}]   ✓ Verified (confidence: ${confidence}/10) — saving email`);
+          } else {
+            console.log(`[${ts()}]   ✗ Unverified (confidence: ${confidence}/10): ${reason} — skipping`);
+          }
         }
-        if (!phoneConfirmed) rowNotes = rowNotes ? `${rowNotes}, phone mismatch` : "phone mismatch";
+
+        matchVerified = String(verified && confidence >= 7);
+        verificationReason = reason;
+
+        if (verified && confidence >= 7) {
+          // Lose focus — human switches away to write down the email
+          const focusLossMs = Math.floor(Math.random() * 20000) + 20000; // 20-40s
+          console.log(`[${ts()}]   Switching away for ${Math.round(focusLossMs / 1000)}s (writing down email)...`);
+          await page.keyboard.press("Meta+M");
+          await page.waitForTimeout(focusLossMs);
+          await page.bringToFront();
+
+          const { error: updateErr } = await supabase
+            .from("pineyweb_prospects")
+            .update({ email, email_source: "Facebook", facebook_url: url })
+            .eq("place_id", p.place_id);
+
+          if (updateErr) {
+            console.log(`[${ts()}]   DB save failed: ${updateErr.message}`);
+            rowNotes = "db save failed";
+          } else {
+            emailsSaved++;
+            console.log(`[${ts()}]   ✓ Email saved — outreach pending review`);
+          }
+        } else {
+          // Unverified — mark for review, don't save email
+          await supabase
+            .from("pineyweb_prospects")
+            .update({ notes: "Facebook match unverified — needs review", facebook_url: url })
+            .eq("place_id", p.place_id);
+          rowNotes = `unverified: ${reason}`;
+        }
+        if (!phoneConfirmed && verified && confidence >= 7) rowNotes = rowNotes ? `${rowNotes}, phone mismatch` : "phone mismatch";
       } else if (url) {
         noEmail++;
         console.log(`[${ts()}]   ✗ Page found but no email: ${url}`);
@@ -895,6 +965,8 @@ async function main() {
         facebook_url: url || "",
         city: p.city,
         notes: rowNotes,
+        match_verified: matchVerified,
+        verification_reason: verificationReason,
       });
 
       tested++;
@@ -914,6 +986,8 @@ async function main() {
         facebook_url: "",
         city: p.city,
         notes: `error: ${err instanceof Error ? err.message : err}`,
+        match_verified: "",
+        verification_reason: "",
       });
       tested++;
       if (tested % 10 === 0) logProgress();
