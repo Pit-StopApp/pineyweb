@@ -83,6 +83,18 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  if (type === "email.bounced") {
+    console.log(`[Resend Webhook] Bounce received for ${recipientEmail}`);
+    await supabase
+      .from("pineyweb_prospects")
+      .update({
+        email_delivered: false,
+        email_bounced: true,
+        notes: "Email bounced",
+      })
+      .eq("email", recipientEmail);
+  }
+
   if (type === "email.complained") {
     await supabase.from("pineyweb_prospects").update({ email_spam: true }).eq("email", recipientEmail);
 
