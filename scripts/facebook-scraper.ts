@@ -482,6 +482,10 @@ async function verifyMatch(
       }),
     });
     const data = await response.json();
+    if (!data.content || !data.content[0] || !data.content[0].text) {
+      console.log(`[${ts()}]   Verification API returned unexpected response: ${JSON.stringify(data)}`);
+      return { verified: true, confidence: 6, reason: "API error — defaulting to save" };
+    }
     const text = data.content[0].text.trim();
     return JSON.parse(text);
   } catch (err) {
@@ -545,7 +549,7 @@ async function tryMatchCandidates(
 
       // Pause on images if visible — as if looking at photos
       const hasPhotos = await page.locator('img[src*="fbcdn"], img[src*="scontent"]').first().isVisible().catch(() => false);
-      if (hasPhotos) {
+      if (hasPhotos && Math.random() < 0.3) {
         const photoDelay = Math.floor(Math.random() * 2000) + 2000; // 2-4s
         console.log(`[${ts()}]   Photos visible — pausing ${Math.round(photoDelay / 1000)}s`);
         await page.waitForTimeout(photoDelay);
