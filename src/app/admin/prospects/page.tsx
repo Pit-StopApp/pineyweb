@@ -49,6 +49,8 @@ function ProspectsPageInner() {
   const [adminName, setAdminName] = useState("Admin");
   const [enriching, setEnriching] = useState(false);
   const [enrichProgress, setEnrichProgress] = useState("");
+  const [sendingToKennedy, setSendingToKennedy] = useState(false);
+  const [sendResult, setSendResult] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanCity, setScanCity] = useState("");
   const [scanRadius, setScanRadius] = useState("25");
@@ -202,6 +204,58 @@ function ProspectsPageInner() {
     XLSX.writeFile(wb, `${clientSlug}-leads-${date}.xlsx`);
   };
 
+  const sendToKennedy = async () => {
+    setSendingToKennedy(true);
+    setSendResult("");
+    try {
+      const XLSX = await import("xlsx");
+      const rows = sorted.map(p => ({
+        "Business Name": p.business_name,
+        "Address": (p as unknown as Record<string, unknown>).address || "",
+        "City": p.city,
+        "Phone": p.phone || "",
+        "Website": p.website_url || "",
+        "Google Maps": p.google_maps_url || "",
+        "Rating": p.rating || "",
+        "Reviews": p.review_count || "",
+        "Priority": `T${p.priority_tier}`,
+        "Notes": p.notes || "",
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Leads");
+      const xlsxData = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+      const tier1 = sorted.filter(p => p.priority_tier === 1).length;
+      const tier2 = sorted.filter(p => p.priority_tier === 2).length;
+
+      const res = await fetch("/api/admin/send-leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: "hello@sipsociety.social",
+          clientName: "Kennedy",
+          city: search || "East Texas",
+          totalLeads: sorted.length,
+          tier1Leads: tier1,
+          tier2Leads: tier2,
+          templatesUrl: "https://pineyweb.com/docs/sip-society-outreach-templates",
+          xlsxBase64: xlsxData,
+          fileName: `sip-society-leads-${new Date().toISOString().split("T")[0]}.xlsx`,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSendResult("Sent to Kennedy!");
+      } else {
+        setSendResult(`Failed: ${data.error}`);
+      }
+    } catch (err) {
+      setSendResult(`Error: ${err instanceof Error ? err.message : "unknown"}`);
+    }
+    setSendingToKennedy(false);
+    setTimeout(() => setSendResult(""), 5000);
+  };
+
   if (loading) return <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#fef9f1" }}><p style={{ color: "#414942" }}>Loading...</p></div>;
 
   const filtered = prospects.filter(p => {
@@ -270,9 +324,15 @@ function ProspectsPageInner() {
           </div>
           <div className="flex items-center gap-3">
             {clientSlug === "sip-society" && (
-              <button onClick={exportToExcel} className="px-4 py-2.5 rounded-lg border text-sm font-bold transition-colors hover:bg-[#f2ede5]" style={{ borderColor: "#c1c9bf", color: "#316342" }}>
-                <span className="material-symbols-outlined text-[16px] align-middle mr-1">download</span>Export Excel
-              </button>
+              <>
+                <button onClick={exportToExcel} className="px-4 py-2.5 rounded-lg border text-sm font-bold transition-colors hover:bg-[#f2ede5]" style={{ borderColor: "#c1c9bf", color: "#316342" }}>
+                  <span className="material-symbols-outlined text-[16px] align-middle mr-1">download</span>Export Excel
+                </button>
+                <button onClick={sendToKennedy} disabled={sendingToKennedy || sorted.length === 0} className="px-4 py-2.5 rounded-lg text-sm font-bold text-white transition-colors disabled:opacity-40" style={{ backgroundColor: "#805533" }}>
+                  {sendingToKennedy ? "Sending..." : "Send to Kennedy"}
+                </button>
+                {sendResult && <span className="text-sm italic" style={{ color: "#316342" }}>{sendResult}</span>}
+              </>
             )}
             <div className="relative">
               <input value={search} onChange={e => { setSearch(e.target.value); setPage(0); }} placeholder="Search by name or city..." className="pl-10 pr-4 py-2.5 rounded-lg border text-sm w-64" style={{ borderColor: "#c1c9bf", backgroundColor: "#ffffff" }} />
