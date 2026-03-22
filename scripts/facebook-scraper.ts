@@ -308,6 +308,17 @@ function extractWebsiteUrl(text: string): string | null {
   return null;
 }
 
+// --- Strip Facebook UI noise from page text before email extraction ---
+function sanitizePageText(text: string): string {
+  return text
+    .replace(/Comment as Piney Web Co\.?/gi, "")
+    .replace(/Comment as Dustin Hartman\.?/gi, "")
+    .replace(/[^\s]*@facebook\.com[^\s]*/g, "")
+    .replace(/EmailMessenger/gi, " ")
+    .replace(/MobileEmail/gi, " ")
+    .replace(/EmailEmail/gi, " ");
+}
+
 // --- Email extraction ---
 async function extractEmailFromPage(page: Page): Promise<{ email: string | null; website: string | null }> {
   try {
@@ -318,7 +329,8 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
 
     // Step 1: Scan the main page content
     console.log(`[${ts()}]   Scanning main page for email and website...`);
-    const mainText = await page.textContent("body") || "";
+    const rawMainText = await page.textContent("body") || "";
+    const mainText = sanitizePageText(rawMainText);
     const website = extractWebsiteUrl(mainText);
     if (website) console.log(`[${ts()}]   Website detected: ${website}`);
 
@@ -342,10 +354,20 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
       }
     }
 
-    // Step 2: Only navigate to contact info for vanity URL pages (NOT profile.php)
+    // Step 2: For profile.php pages, scroll down to load lazy content
     const currentUrl = page.url();
     if (currentUrl.includes("profile.php?id=")) {
-      console.log(`[${ts()}]   Profile-style page — skipping contact info navigation`);
+      console.log(`[${ts()}]   Profile-style page — scrolling to load lazy content`);
+      for (let s = 0; s < 3; s++) {
+        await page.mouse.wheel(0, Math.floor(Math.random() * 300) + 400);
+        await page.waitForTimeout(Math.floor(Math.random() * 1500) + 2000);
+        const scrolledText = sanitizePageText(await page.textContent("body") || "");
+        const scrolledEmail = extractCleanEmail(scrolledText);
+        if (scrolledEmail) {
+          console.log(`[${ts()}]   Email found after scroll ${s + 1}`);
+          return { email: scrolledEmail, website: website || extractWebsiteUrl(scrolledText) };
+        }
+      }
       return { email: null, website };
     }
 
@@ -376,7 +398,7 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
       return { email: null, website };
     }
 
-    const contactText = await page.textContent("body") || "";
+    const contactText = sanitizePageText(await page.textContent("body") || "");
     // Check contact page for website too if not found on main page
     const contactWebsite = website || extractWebsiteUrl(contactText);
     if (contactWebsite && !website) console.log(`[${ts()}]   Website detected on contact page: ${contactWebsite}`);
@@ -689,10 +711,15 @@ async function searchFacebook(
     if (result.url) return result;
   }
 
-  // Retry with simplified name (first 2-3 words, no city, no TX)
-  const words = businessName.split(/\s+/);
-  const simplifiedName = words.slice(0, Math.min(3, words.length)).join(" ");
-  if (simplifiedName.split(/\s+/).length >= 2) {
+  // Retry with simplified name — strip common suffixes, keep first 2-3 meaningful words
+  const SUFFIX_WORDS = new Set(["llc", "inc", "co", "corp", "ltd", "pllc", "pc", "pa", "dba", "tx", "texas", "dds", "md", "jr", "sr", "ii", "iii"]);
+  const cityLower = city.toLowerCase();
+  const meaningfulWords = businessName.split(/\s+/).filter(w => {
+    const lower = w.replace(/[^a-zA-Z]/g, "").toLowerCase();
+    return lower.length > 0 && !SUFFIX_WORDS.has(lower) && lower !== cityLower;
+  });
+  const simplifiedName = meaningfulWords.slice(0, Math.min(3, meaningfulWords.length)).join(" ");
+  if (meaningfulWords.length >= 2) {
     const retryDelay = Math.floor(Math.random() * 10000) + 15000;
     console.log(`[${ts()}]   ${candidates.length === 0 ? "Zero results" : "No match"}. Waiting ${Math.round(retryDelay / 1000)}s before retry with: "${simplifiedName}"`);
     await page.waitForTimeout(retryDelay);
