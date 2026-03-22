@@ -21,6 +21,53 @@ function randomDelay(minMs: number, maxMs: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
 }
 
+async function randomScroll(page: Page) {
+  const scrolls = Math.floor(Math.random() * 3) + 2;
+  for (let i = 0; i < scrolls; i++) {
+    await page.mouse.wheel(0, Math.floor(Math.random() * 300) + 100);
+    await page.waitForTimeout(Math.floor(Math.random() * 1000) + 500);
+  }
+}
+
+async function randomMouseMove(page: Page) {
+  const moves = Math.floor(Math.random() * 3) + 2;
+  for (let i = 0; i < moves; i++) {
+    await page.mouse.move(
+      Math.floor(Math.random() * 1200) + 100,
+      Math.floor(Math.random() * 700) + 100
+    );
+    await page.waitForTimeout(Math.floor(Math.random() * 500) + 200);
+  }
+}
+
+async function humanType(page: Page, selector: string, text: string) {
+  await page.click(selector);
+  for (const char of text) {
+    await page.keyboard.type(char, { delay: Math.floor(Math.random() * 100) + 50 });
+  }
+}
+
+async function feedBreak(page: Page) {
+  console.log(`[${ts()}]   Taking a human break — checking feed`);
+  await page.goto("https://www.facebook.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
+  const waitTime = Math.floor(Math.random() * 10000) + 10000; // 10-20s
+  const scrollCount = Math.floor(waitTime / 3000);
+  for (let i = 0; i < scrollCount; i++) {
+    await randomScroll(page);
+    await page.waitForTimeout(Math.floor(Math.random() * 2000) + 1500);
+  }
+  await randomMouseMove(page);
+}
+
+function shuffleArray<T>(arr: T[]): T[] {
+  const shuffled = [...arr];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
 function isRedirectedToPersonalProfile(url: string): boolean {
   const lower = url.toLowerCase();
   return PERSONAL_PROFILE_MARKERS.some(m => lower.includes(m));
@@ -199,6 +246,7 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
     console.log(`[${ts()}]   No email on main page, trying: ${contactUrl}`);
     await page.goto(contactUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
     await page.waitForTimeout(3000);
+    await randomScroll(page);
 
     if (isRedirectedToPersonalProfile(page.url())) {
       console.log(`[${ts()}]   Redirected to personal profile — skipping`);
@@ -277,6 +325,8 @@ async function tryMatchCandidates(
 
       await page.goto(href, { waitUntil: "domcontentloaded", timeout: 15000 });
       await page.waitForTimeout(2000);
+      await randomScroll(page);
+      await randomMouseMove(page);
 
       if (isRedirectedToPersonalProfile(page.url())) {
         console.log(`[${ts()}]   Redirected to personal profile — skipping`);
@@ -311,6 +361,8 @@ async function searchFacebook(
   console.log(`[${ts()}]   Searching Facebook: "${humanQuery}"`);
   await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(5000);
+  await randomScroll(page);
+  await randomMouseMove(page);
 
   if (page.url().includes("/login")) {
     console.log(`[${ts()}]   Session expired — redirected to login`);
@@ -337,6 +389,8 @@ async function searchFacebook(
     console.log(`[${ts()}]   Retry searching: "${simplifiedName}"`);
     await page.goto(retryUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
     await page.waitForTimeout(5000);
+    await randomScroll(page);
+    await randomMouseMove(page);
 
     const retryCandidates = await collectCandidates(page);
     console.log(`[${ts()}]   Retry found ${retryCandidates.length} candidate page links`);
@@ -412,31 +466,49 @@ async function main() {
   if (!rawProspects || rawProspects.length === 0) { console.log("No prospects found"); return; }
 
   // Filter out already-searched prospects client-side
-  const prospects = rawProspects.filter(p =>
+  const sessionSize = Math.floor(Math.random() * 11) + 35; // 35-45
+  const filtered = rawProspects.filter(p =>
     !p.facebook_url &&
     p.notes !== "No Facebook presence"
-  ).slice(0, 50);
+  ).slice(0, sessionSize);
+  const prospects = shuffleArray(filtered);
 
   if (prospects.length === 0) { console.log("All prospects already searched"); return; }
 
-  console.log(`[${ts()}] Loaded ${prospects.length} prospects (filtered from ${rawProspects.length})\n`);
+  console.log(`[${ts()}] Loaded ${prospects.length} prospects (session size: ${sessionSize}, filtered from ${rawProspects.length})\n`);
 
   const browser = await chromium.launch({
     headless: false,
     args: ["--disable-blink-features=AutomationControlled"],
   });
+  const vpWidth = Math.floor(Math.random() * 200) + 1280;
+  const vpHeight = Math.floor(Math.random() * 200) + 800;
   const context = await browser.newContext({
     userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    viewport: { width: 1440, height: 900 },
+    viewport: { width: vpWidth, height: vpHeight },
   });
+  console.log(`[${ts()}] Viewport: ${vpWidth}x${vpHeight}`);
 
   await loadOrCreateSession(context);
   const page = await context.newPage();
 
   let hits = 0;
   let emailsSent = 0;
+  const feedBreakInterval = Math.floor(Math.random() * 5) + 8; // every 8-12 prospects
+  const extendedBreakInterval = Math.floor(Math.random() * 6) + 15; // every 15-20 prospects
 
   for (let i = 0; i < prospects.length; i++) {
+    // Occasional feed visit
+    if (i > 0 && i % feedBreakInterval === 0) {
+      await feedBreak(page);
+    }
+
+    // Extended break
+    if (i > 0 && i % extendedBreakInterval === 0) {
+      const breakMs = Math.floor(Math.random() * 240000) + 180000; // 3-7 min
+      console.log(`[${ts()}]   Taking extended break to avoid detection (${Math.round(breakMs / 60000)}min)...`);
+      await page.waitForTimeout(breakMs);
+    }
     const p = prospects[i];
     console.log(`\n[${ts()}] [${i + 1}/${prospects.length}] ${p.business_name} (${p.city}) — T${p.priority_tier}, ${p.rating}★, ${p.review_count} reviews`);
 
