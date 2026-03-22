@@ -54,7 +54,7 @@ export default function AdminClients() {
       setAdminName(me.full_name || "Admin");
       const { data } = await supabase.from("pineyweb_clients").select("*").order("created_at", { ascending: false });
       setClients((data || []) as Client[]);
-      const { data: sc } = await supabase.from("pineyweb_scanner_clients").select("*").order("created_at", { ascending: false });
+      const { data: sc } = await supabase.from("pineyweb_scanner_clients").select("*").order("created_at", { ascending: true });
       setScannerClients((sc || []) as ScannerClient[]);
       setLoading(false);
     };
@@ -349,7 +349,7 @@ export default function AdminClients() {
                     });
                     const data = await res.json();
                     setScanProgress(`Complete — ${data.total || 0} leads found`);
-                    const { data: sc } = await supabase.from("pineyweb_scanner_clients").select("*").order("created_at", { ascending: false });
+                    const { data: sc } = await supabase.from("pineyweb_scanner_clients").select("*").order("created_at", { ascending: true });
                     setScannerClients((sc || []) as ScannerClient[]);
                   } catch { setScanProgress("Scan failed"); }
                   setScanRunning(false);
