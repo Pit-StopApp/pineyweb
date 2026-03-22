@@ -23,19 +23,32 @@ function randomDelay(minMs: number, maxMs: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
 }
 
-function fuzzyClean(s: string): string {
-  return s
+function fuzzyClean(s: string, city?: string): string {
+  let cleaned = s
     .toLowerCase()
-    .replace(/\b(llc|inc|corp|co|ltd|pllc|pc|pa|dba|and)\b/g, "")
-    .replace(/[&'''",.\-–—]/g, "")
+    .replace(/\b(llc|inc|corp|co|ltd|pllc|pc|pa|dba|and|the|tx|texas)\b/g, "")
+    .replace(/[&'''""",._\-–—()]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+  if (city) {
+    cleaned = cleaned.replace(new RegExp(`\\b${city.toLowerCase()}\\b`, "g"), "").replace(/\s+/g, " ").trim();
+  }
+  return cleaned;
 }
 
-function fuzzyMatch(pageName: string, businessName: string): boolean {
-  const a = fuzzyClean(pageName);
-  const b = fuzzyClean(businessName);
-  return a.includes(b) || b.includes(a) || a === b;
+function fuzzyMatch(pageName: string, businessName: string, city?: string): boolean {
+  const a = fuzzyClean(pageName, city);
+  const b = fuzzyClean(businessName, city);
+
+  // Exact or substring match
+  if (a.includes(b) || b.includes(a) || a === b) return true;
+
+  // Word overlap — if 50% of prospect words appear in page name, it's a match
+  const bWords = b.split(" ").filter(w => w.length > 1);
+  if (bWords.length === 0) return false;
+  const aWords = new Set(a.split(" ").filter(w => w.length > 1));
+  const overlap = bWords.filter(w => aWords.has(w)).length;
+  return overlap / bWords.length >= 0.5;
 }
 
 async function loadOrCreateSession(context: BrowserContext): Promise<void> {
@@ -179,8 +192,14 @@ async function searchFacebook(
 
   console.log(`[${ts()}]   Found ${candidates.length} candidate page links`);
 
+  // Log top candidates for debugging
+  for (const { text } of candidates.slice(0, 5)) {
+    const isMatch = fuzzyMatch(text, businessName, city);
+    console.log(`[${ts()}]   Candidate: "${text}" → ${isMatch ? "MATCH" : "no match"} (vs "${businessName}")`);
+  }
+
   for (const { text, href } of candidates) {
-    if (fuzzyMatch(text, businessName)) {
+    if (fuzzyMatch(text, businessName, city)) {
       console.log(`[${ts()}]   Matched: "${text}"`);
 
       await page.goto(href, { waitUntil: "domcontentloaded", timeout: 15000 });
@@ -195,6 +214,42 @@ async function searchFacebook(
 
       const email = await extractEmail(page);
       return { url: page.url(), email };
+    }
+  }
+
+  // Retry with simplified name (first 3 words only)
+  const simplifiedName = businessName.split(/\s+/).slice(0, 3).join(" ");
+  if (simplifiedName !== businessName && simplifiedName.split(/\s+/).length >= 2) {
+    console.log(`[${ts()}]   No match. Retrying with simplified name: "${simplifiedName}"`);
+    const retryQuery = encodeURIComponent(`${simplifiedName} ${city} TX`);
+    const retryUrl = `https://www.facebook.com/search/pages/?q=${retryQuery}`;
+    await page.goto(retryUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+    await page.waitForTimeout(5000);
+
+    const retryLinks = await page.locator("a[href]").all();
+    const retryCandidates: { text: string; href: string }[] = [];
+    for (const link of retryLinks) {
+      const href = await link.getAttribute("href").catch(() => null);
+      const text = await link.textContent().catch(() => null);
+      if (!href || !text) continue;
+      if (!href.includes("facebook.com/")) continue;
+      if (href.includes("/search/") || href.includes("/login") || href.includes("/help") || href.includes("/policies")) continue;
+      if (text.trim().length < 3) continue;
+      retryCandidates.push({ text: text.trim(), href });
+    }
+
+    for (const { text } of retryCandidates.slice(0, 5)) {
+      console.log(`[${ts()}]   Retry candidate: "${text}" → ${fuzzyMatch(text, simplifiedName, city) ? "MATCH" : "no match"}`);
+    }
+
+    for (const { text, href } of retryCandidates) {
+      if (fuzzyMatch(text, simplifiedName, city)) {
+        console.log(`[${ts()}]   Retry matched: "${text}"`);
+        await page.goto(href, { waitUntil: "domcontentloaded", timeout: 15000 });
+        await page.waitForTimeout(2000);
+        const email = await extractEmail(page);
+        return { url: page.url(), email };
+      }
     }
   }
 
