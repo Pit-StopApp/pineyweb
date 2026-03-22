@@ -271,7 +271,11 @@ Resend fires webhooks to `POST /api/webhooks/resend`:
 
 ### Columns Displayed
 
-Business Name, City, Phone, Priority (T1/T2 badge), Status (pill badge with color), Follow Up date, Actions (cycle status, notes, set follow-up date).
+Business Name, City, Phone, Priority (T1/T2 badge), Status (pill badge with color), Notes (preview), Actions (cycle status, notes editor, set follow-up date).
+
+### Notes
+
+The Notes column shows a preview of the first 20 characters of any saved notes. Clicking the preview or the notes icon in the Actions column opens an inline text area below the row. Notes are saved to the `notes` column in `pineyweb_prospects` via PATCH to `/api/admin/prospects` on blur. The prospect `id` is used to update the correct record. Full note text is visible on hover via title attribute.
 
 ### Filtering
 
@@ -283,7 +287,7 @@ Text input above filters. Client-side filtering on business name or city. Update
 
 ### Sorting
 
-Clickable column headers: Business Name, City, Priority, Status, Follow Up. Click to sort ascending, click again for descending. Arrow indicator (↑/↓) shows active sort. Default: priority_tier ascending.
+Clickable column headers: Business Name, City, Priority, Status, Notes. Click to sort ascending, click again for descending. Arrow indicator (↑/↓) shows active sort. Default: priority_tier ascending.
 
 ### Pagination
 

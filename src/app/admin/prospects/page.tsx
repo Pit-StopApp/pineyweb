@@ -240,7 +240,7 @@ export default function ProspectsPage() {
             </colgroup>
             <thead>
               <tr className="text-[11px] uppercase tracking-[0.12em] font-bold border-b" style={{ color: "#414942", borderColor: "rgba(193,201,191,0.2)" }}>
-                {([["business_name", "Business Name"], ["city", "City"], ["_phone", "Phone"], ["priority_tier", "Priority"], ["outreach_status", "Status"], ["follow_up_date", "Follow Up"]] as const).map(([col, label]) => {
+                {([["business_name", "Business Name"], ["city", "City"], ["_phone", "Phone"], ["priority_tier", "Priority"], ["outreach_status", "Status"], ["notes", "Notes"]] as const).map(([col, label]) => {
                   const sortable = col !== "_phone";
                   return (
                     <th key={col} className={`py-4 px-3 first:pl-6${sortable ? " cursor-pointer select-none hover:text-[#316342]" : ""}`} onClick={sortable ? () => toggleSort(col) : undefined}>
@@ -272,7 +272,9 @@ export default function ProspectsPage() {
                       {p.email_spam && <span title="Marked as spam" className="ml-1" style={{ fontSize: "14px" }}>⚠️</span>}
                       {p.email_delivered && !p.email_spam && <span title="Email delivered" className="ml-1" style={{ fontSize: "14px" }}>✅</span>}
                     </td>
-                    <td className="py-3 px-3 text-sm" style={{ color: "#414942" }}>{p.follow_up_date || "—"}</td>
+                    <td className="py-3 px-3 text-sm truncate cursor-pointer" style={{ color: p.notes ? "#414942" : "#c1c9bf" }} title={p.notes || ""} onClick={() => setExpandedNote(expandedNote === p.id ? null : p.id)}>
+                      {p.notes ? (p.notes.length > 20 ? p.notes.slice(0, 20) + "..." : p.notes) : "—"}
+                    </td>
                     <td className="py-3 px-3 pr-6 text-right">
                       <div className="flex gap-1 justify-end">
                         <button onClick={() => {
