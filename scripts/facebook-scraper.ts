@@ -480,24 +480,18 @@ async function main() {
     .is("email", null)
     .not("phone", "is", null)
     .gte("review_count", 5)
+    .is("facebook_url", null)
+    .neq("notes", "No Facebook presence")
+    .neq("notes", "Facebook found, no email listed")
     .order("priority_tier", { ascending: true })
-    .order("rating", { ascending: false })
-    .limit(50);
+    .order("rating", { ascending: false });
 
   if (error) { console.error("Supabase error:", error.message); process.exit(1); }
   if (!rawProspects || rawProspects.length === 0) { console.log("No prospects found"); return; }
 
-  // Filter out already-searched prospects client-side
-  const sessionSize = Math.floor(Math.random() * 11) + 35; // 35-45
-  const filtered = rawProspects.filter(p =>
-    !p.facebook_url &&
-    p.notes !== "No Facebook presence"
-  ).slice(0, sessionSize);
-  const prospects = shuffleArray(filtered);
+  const prospects = shuffleArray(rawProspects);
 
-  if (prospects.length === 0) { console.log("All prospects already searched"); return; }
-
-  console.log(`[${ts()}] Loaded ${prospects.length} prospects (session size: ${sessionSize}, filtered from ${rawProspects.length})\n`);
+  console.log(`[${ts()}] Loaded ${prospects.length} prospects\n`);
 
   const browser = await chromium.launch({
     headless: false,
