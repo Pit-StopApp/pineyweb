@@ -7,6 +7,7 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PINEYWEB_URL = process.env.PINEYWEB_URL || "https://pineyweb.com";
 const SESSION_FILE = process.env.FACEBOOK_STATE_FILE || "scripts/fb-session.json";
+const PERSONAL_PROFILE_MARKERS = ["dustin.hartman", "dustinhartman", "hitmanhartman"];
 
 if (!SUPABASE_URL || !SUPABASE_KEY) { console.error("Missing Supabase env vars"); process.exit(1); }
 
@@ -14,20 +15,51 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 function ts(): string { return new Date().toLocaleTimeString(); }
 
-const isValidEmail = (v: unknown): v is string =>
-  typeof v === "string" && v.includes("@") && v.includes(".");
-
 function randomDelay(minMs: number, maxMs: number): Promise<void> {
   const ms = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
   console.log(`[${ts()}]   Waiting ${Math.round(ms / 1000)}s...`);
   return new Promise(r => setTimeout(r, ms));
 }
 
+function isRedirectedToPersonalProfile(url: string): boolean {
+  const lower = url.toLowerCase();
+  return PERSONAL_PROFILE_MARKERS.some(m => lower.includes(m));
+}
+
+// --- Clean email extraction ---
+function extractCleanEmail(text: string): string | null {
+  const emailMatches = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
+  const email = emailMatches ? emailMatches.find(e =>
+    !e.includes("@facebook.com") &&
+    !e.includes("@fb.com") &&
+    !e.includes("@sentry") &&
+    !e.includes("@fbcdn") &&
+    !e.includes("@example") &&
+    e.length < 100
+  ) : null;
+  return email || null;
+}
+
+// --- Fuzzy matching with unique word requirement ---
+const GENERIC_WORDS = new Set([
+  "by", "the", "and", "a", "of", "in", "at", "for", "to", "on", "or", "my", "our", "your",
+  "massage", "shop", "services", "service", "salon", "auto", "tax", "insurance", "repair",
+  "co", "company", "studio", "center", "group", "team", "pro", "plus", "express", "mobile",
+  "nails", "spa", "bar", "grill", "cafe", "restaurant", "dental", "clinic", "care",
+  "barbershop", "barber", "hair", "beauty", "fitness", "gym", "body", "tire", "tires",
+  "plumbing", "electric", "electrical", "heating", "cooling", "roofing", "painting",
+  "construction", "landscaping", "lawn", "tree", "pest", "cleaning", "photography",
+  "chiropractic", "veterinary", "vet", "animal", "pet", "medical", "health",
+  "realty", "real", "estate", "agency", "office", "firm", "law", "accounting",
+  "llc", "inc", "corp", "ltd", "pllc", "pc", "pa", "dba", "tx", "texas",
+]);
+
 function fuzzyClean(s: string, city?: string): string {
   let cleaned = s
     .toLowerCase()
-    .replace(/\b(llc|inc|corp|co|ltd|pllc|pc|pa|dba|and|the|tx|texas)\b/g, "")
-    .replace(/[&'''""",._\-–—()]/g, " ")
+    .replace(/&/g, " and ")
+    .replace(/_/g, " ")
+    .replace(/['''""",.\-–—()!@#$%^*]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   if (city) {
@@ -40,17 +72,38 @@ function fuzzyMatch(pageName: string, businessName: string, city?: string): bool
   const a = fuzzyClean(pageName, city);
   const b = fuzzyClean(businessName, city);
 
-  // Exact or substring match
-  if (a.includes(b) || b.includes(a) || a === b) return true;
-
-  // Word overlap — if 50% of prospect words appear in page name, it's a match
+  // Remove generic words for the unique-word check
+  const aWords = a.split(" ").filter(w => w.length > 1);
   const bWords = b.split(" ").filter(w => w.length > 1);
-  if (bWords.length === 0) return false;
-  const aWords = new Set(a.split(" ").filter(w => w.length > 1));
-  const overlap = bWords.filter(w => aWords.has(w)).length;
-  return overlap / bWords.length >= 0.5;
+  const aUniqueWords = new Set(aWords.filter(w => !GENERIC_WORDS.has(w)));
+  const bUniqueWords = bWords.filter(w => !GENERIC_WORDS.has(w));
+
+  // Must have at least one unique (non-generic) word match
+  const hasUniqueOverlap = bUniqueWords.some(w => aUniqueWords.has(w));
+  if (!hasUniqueOverlap) return false;
+
+  // Exact or substring match (after cleaning)
+  const aClean = aWords.filter(w => !GENERIC_WORDS.has(w)).join(" ");
+  const bClean = bUniqueWords.join(" ");
+  if (aClean.includes(bClean) || bClean.includes(aClean) || aClean === bClean) return true;
+
+  // Word overlap — if 50% of unique prospect words appear in page name
+  if (bUniqueWords.length === 0) return false;
+  const overlap = bUniqueWords.filter(w => aUniqueWords.has(w)).length;
+  return overlap / bUniqueWords.length >= 0.5;
 }
 
+// --- Humanize search query ---
+function humanizeQuery(businessName: string, city: string): string {
+  return `${businessName} ${city} TX`
+    .replace(/&/g, "and")
+    .replace(/_/g, " ")
+    .replace(/['''""",.\-–—()!@#$%^*]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// --- Session management ---
 async function loadOrCreateSession(context: BrowserContext): Promise<void> {
   const sessionPath = path.resolve(SESSION_FILE);
 
@@ -69,7 +122,6 @@ async function loadOrCreateSession(context: BrowserContext): Promise<void> {
   await page.goto("https://www.facebook.com/login");
   await page.waitForURL("**/facebook.com/**", { timeout: 300000 }).catch(() => {});
 
-  // Wait for user to press Enter
   await new Promise<void>(resolve => {
     process.stdin.resume();
     process.stdin.once("data", () => {
@@ -84,24 +136,19 @@ async function loadOrCreateSession(context: BrowserContext): Promise<void> {
   await page.close();
 }
 
-const SYSTEM_EMAIL_DOMAINS = ["facebook.com", "fb.com", "sentry.io", "example.com", "fbcdn.net"];
-
-function extractEmailFromText(text: string): string | null {
-  const matches = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
-  if (!matches) return null;
-  for (const match of matches) {
-    if (SYSTEM_EMAIL_DOMAINS.some(d => match.includes(d))) continue;
-    if (isValidEmail(match)) return match;
-  }
-  return null;
-}
-
+// --- Email extraction ---
 async function extractEmail(page: Page): Promise<string | null> {
   try {
-    // Step 1: Scan the main page content immediately
+    // Check for personal profile redirect
+    if (isRedirectedToPersonalProfile(page.url())) {
+      console.log(`[${ts()}]   Redirected to personal profile — skipping`);
+      return null;
+    }
+
+    // Step 1: Scan the main page content
     console.log(`[${ts()}]   Scanning main page for email...`);
     const mainText = await page.textContent("body") || "";
-    const mainEmail = extractEmailFromText(mainText);
+    const mainEmail = extractCleanEmail(mainText);
     if (mainEmail) {
       console.log(`[${ts()}]   Email found on main page`);
       return mainEmail;
@@ -113,7 +160,7 @@ async function extractEmail(page: Page): Promise<string | null> {
       const href = await link.getAttribute("href").catch(() => null);
       if (href) {
         const raw = href.replace("mailto:", "").split("?")[0];
-        const email = extractEmailFromText(raw);
+        const email = extractCleanEmail(raw);
         if (email) {
           console.log(`[${ts()}]   Email found via mailto link`);
           return email;
@@ -121,17 +168,26 @@ async function extractEmail(page: Page): Promise<string | null> {
       }
     }
 
-    // Step 2: Fallback — navigate to contact info page
-    const currentUrl = page.url().replace(/\/$/, "");
-    const contactUrl = currentUrl.includes("profile.php?id=")
-      ? currentUrl + "&sk=about_contact_and_basic_info"
-      : currentUrl + "/directory_contact_info";
+    // Step 2: Only navigate to contact info for vanity URL pages (NOT profile.php)
+    const currentUrl = page.url();
+    if (currentUrl.includes("profile.php?id=")) {
+      console.log(`[${ts()}]   Profile-style page — skipping contact info navigation`);
+      return null;
+    }
+
+    const contactUrl = currentUrl.replace(/\/$/, "") + "/directory_contact_info";
     console.log(`[${ts()}]   No email on main page, trying: ${contactUrl}`);
     await page.goto(contactUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
     await page.waitForTimeout(3000);
 
+    // Check for redirect to personal profile
+    if (isRedirectedToPersonalProfile(page.url())) {
+      console.log(`[${ts()}]   Redirected to personal profile — skipping`);
+      return null;
+    }
+
     const contactText = await page.textContent("body") || "";
-    const contactEmail = extractEmailFromText(contactText);
+    const contactEmail = extractCleanEmail(contactText);
     if (contactEmail) {
       console.log(`[${ts()}]   Email found on contact info page`);
       return contactEmail;
@@ -158,25 +214,8 @@ async function confirmPhoneMatch(page: Page, phone: string | null): Promise<bool
   }
 }
 
-async function searchFacebook(
-  page: Page,
-  businessName: string,
-  city: string,
-  phone: string | null
-): Promise<{ url: string | null; email: string | null }> {
-  const query = encodeURIComponent(`${businessName} ${city} TX`);
-  const searchUrl = `https://www.facebook.com/search/pages/?q=${query}`;
-
-  console.log(`[${ts()}]   Searching Facebook: "${businessName} ${city} TX"`);
-  await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
-  await page.waitForTimeout(5000);
-
-  if (page.url().includes("/login")) {
-    console.log(`[${ts()}]   Session expired — redirected to login`);
-    return { url: null, email: null };
-  }
-
-  // Collect all links that look like Facebook page links
+// --- Collect candidates from current search results page ---
+async function collectCandidates(page: Page): Promise<{ text: string; href: string }[]> {
   const allLinks = await page.locator("a[href]").all();
   const candidates: { text: string; href: string }[] = [];
 
@@ -190,20 +229,35 @@ async function searchFacebook(
     candidates.push({ text: text.trim(), href });
   }
 
-  console.log(`[${ts()}]   Found ${candidates.length} candidate page links`);
+  return candidates;
+}
 
+// --- Try to match and extract from candidates ---
+async function tryMatchCandidates(
+  page: Page,
+  candidates: { text: string; href: string }[],
+  matchName: string,
+  city: string,
+  phone: string | null
+): Promise<{ url: string | null; email: string | null }> {
   // Log top candidates for debugging
   for (const { text } of candidates.slice(0, 5)) {
-    const isMatch = fuzzyMatch(text, businessName, city);
-    console.log(`[${ts()}]   Candidate: "${text}" → ${isMatch ? "MATCH" : "no match"} (vs "${businessName}")`);
+    const isMatch = fuzzyMatch(text, matchName, city);
+    console.log(`[${ts()}]   Candidate: "${text}" → ${isMatch ? "MATCH" : "no match"} (vs "${matchName}")`);
   }
 
   for (const { text, href } of candidates) {
-    if (fuzzyMatch(text, businessName, city)) {
+    if (fuzzyMatch(text, matchName, city)) {
       console.log(`[${ts()}]   Matched: "${text}"`);
 
       await page.goto(href, { waitUntil: "domcontentloaded", timeout: 15000 });
       await page.waitForTimeout(2000);
+
+      // Check for redirect to personal profile
+      if (isRedirectedToPersonalProfile(page.url())) {
+        console.log(`[${ts()}]   Redirected to personal profile — skipping`);
+        return { url: null, email: null };
+      }
 
       const phoneOk = await confirmPhoneMatch(page, phone);
       if (phoneOk) {
@@ -217,46 +271,58 @@ async function searchFacebook(
     }
   }
 
+  return { url: null, email: null };
+}
+
+// --- Main search function ---
+async function searchFacebook(
+  page: Page,
+  businessName: string,
+  city: string,
+  phone: string | null
+): Promise<{ url: string | null; email: string | null }> {
+  const humanQuery = humanizeQuery(businessName, city);
+  const searchUrl = `https://www.facebook.com/search/pages/?q=${encodeURIComponent(humanQuery)}`;
+
+  console.log(`[${ts()}]   Searching Facebook: "${humanQuery}"`);
+  await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForTimeout(5000);
+
+  if (page.url().includes("/login")) {
+    console.log(`[${ts()}]   Session expired — redirected to login`);
+    return { url: null, email: null };
+  }
+
+  const candidates = await collectCandidates(page);
+  console.log(`[${ts()}]   Found ${candidates.length} candidate page links`);
+
+  const result = await tryMatchCandidates(page, candidates, businessName, city, phone);
+  if (result.url) return result;
+
   // Retry with simplified name (first 3 words only)
   const simplifiedName = businessName.split(/\s+/).slice(0, 3).join(" ");
   if (simplifiedName !== businessName && simplifiedName.split(/\s+/).length >= 2) {
-    console.log(`[${ts()}]   No match. Retrying with simplified name: "${simplifiedName}"`);
-    const retryQuery = encodeURIComponent(`${simplifiedName} ${city} TX`);
-    const retryUrl = `https://www.facebook.com/search/pages/?q=${retryQuery}`;
+    // Delay before retry
+    const retryDelay = Math.floor(Math.random() * 10000) + 15000;
+    console.log(`[${ts()}]   No match. Waiting ${Math.round(retryDelay / 1000)}s before retry with: "${simplifiedName}"`);
+    await page.waitForTimeout(retryDelay);
+
+    const retryQuery = humanizeQuery(simplifiedName, city);
+    const retryUrl = `https://www.facebook.com/search/pages/?q=${encodeURIComponent(retryQuery)}`;
+    console.log(`[${ts()}]   Retry searching: "${retryQuery}"`);
     await page.goto(retryUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
     await page.waitForTimeout(5000);
 
-    const retryLinks = await page.locator("a[href]").all();
-    const retryCandidates: { text: string; href: string }[] = [];
-    for (const link of retryLinks) {
-      const href = await link.getAttribute("href").catch(() => null);
-      const text = await link.textContent().catch(() => null);
-      if (!href || !text) continue;
-      if (!href.includes("facebook.com/")) continue;
-      if (href.includes("/search/") || href.includes("/login") || href.includes("/help") || href.includes("/policies")) continue;
-      if (text.trim().length < 3) continue;
-      retryCandidates.push({ text: text.trim(), href });
-    }
-
-    for (const { text } of retryCandidates.slice(0, 5)) {
-      console.log(`[${ts()}]   Retry candidate: "${text}" → ${fuzzyMatch(text, simplifiedName, city) ? "MATCH" : "no match"}`);
-    }
-
-    for (const { text, href } of retryCandidates) {
-      if (fuzzyMatch(text, simplifiedName, city)) {
-        console.log(`[${ts()}]   Retry matched: "${text}"`);
-        await page.goto(href, { waitUntil: "domcontentloaded", timeout: 15000 });
-        await page.waitForTimeout(2000);
-        const email = await extractEmail(page);
-        return { url: page.url(), email };
-      }
-    }
+    const retryCandidates = await collectCandidates(page);
+    const retryResult = await tryMatchCandidates(page, retryCandidates, simplifiedName, city, phone);
+    if (retryResult.url) return retryResult;
   }
 
   console.log(`[${ts()}]   No matching Facebook page found`);
   return { url: null, email: null };
 }
 
+// --- Outreach ---
 async function sendOutreach(prospect: {
   place_id: string;
   business_name: string;
@@ -300,6 +366,7 @@ async function sendOutreach(prospect: {
   }
 }
 
+// --- Main ---
 async function main() {
   console.log(`[${ts()}] Facebook Scraper starting...\n`);
 
@@ -353,7 +420,6 @@ async function main() {
         console.log(`[${ts()}]   ✓ EMAIL FOUND: ${email}`);
         console.log(`[${ts()}]   Facebook page: ${url}`);
 
-        // Save email + facebook_url to database
         const { error: updateErr } = await supabase
           .from("pineyweb_prospects")
           .update({ email, email_source: "Facebook", facebook_url: url })
@@ -363,13 +429,8 @@ async function main() {
           console.log(`[${ts()}]   DB save failed: ${updateErr.message}`);
         } else {
           console.log(`[${ts()}]   Saved to database`);
-
-          // Send cold outreach immediately
           const sent = await sendOutreach({ ...p, email });
-          if (sent) {
-            emailsSent++;
-            // emailed_at is set by the outreach route on successful send
-          }
+          if (sent) emailsSent++;
         }
       } else if (url) {
         console.log(`[${ts()}]   ✗ Page found but no email: ${url}`);
@@ -390,13 +451,12 @@ async function main() {
       console.log(`[${ts()}]   ✗ Error: ${err instanceof Error ? err.message : err}`);
     }
 
-    // Random delay 45-90 seconds between searches
+    // Random delay 31-57 seconds between searches
     if (i < prospects.length - 1) {
       await randomDelay(31000, 57000);
     }
   }
 
-  // Save session cookies
   const cookies = await context.cookies();
   fs.writeFileSync(path.resolve(SESSION_FILE), JSON.stringify(cookies, null, 2));
   console.log(`\n[${ts()}] Session cookies saved.`);
