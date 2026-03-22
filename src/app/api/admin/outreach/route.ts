@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
           .replace(/\{\{firstName\}\}/g, firstName)
           .replace(/\{\{businessName\}\}/g, prospect.business_name)
           .replace(/\{\{reviewCount\}\}/g, String(prospect.review_count || 0))
-          .replace(/\{\{portfolioUrl\}\}/g, "https://pineyweb.com#work")
+          .replace(/\{\{portfolioUrl\}\}/g, "https://pineyweb.com/#work")
           .replace(/\{\{unsubscribeUrl\}\}/g, `https://pineyweb.com/unsubscribe?id=${prospect.place_id}`);
 
         console.log("[Outreach] Sending to:", prospect.email);
