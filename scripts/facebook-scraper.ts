@@ -80,24 +80,23 @@ async function extractEmailFromAbout(page: Page): Promise<string | null> {
     await page.waitForTimeout(3000);
 
     const bodyText = await page.textContent("body") || "";
-    const emailPattern = /[\w.+-]+@[\w-]+\.[\w.]+/g;
-    const matches = bodyText.match(emailPattern);
+    const emailMatch = bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
 
-    if (matches) {
-      for (const match of matches) {
-        if (match.includes("facebook.com") || match.includes("fb.com")) continue;
-        if (match.includes("example.com")) continue;
-        if (isValidEmail(match)) return match;
+    if (emailMatch) {
+      const email = emailMatch[0];
+      if (!email.includes("facebook.com") && !email.includes("fb.com") && !email.includes("example.com") && isValidEmail(email)) {
+        return email;
       }
     }
 
-    // Check mailto links
+    // Check mailto links as fallback
     const mailtoLinks = await page.locator('a[href^="mailto:"]').all();
     for (const link of mailtoLinks) {
       const href = await link.getAttribute("href").catch(() => null);
       if (href) {
-        const email = href.replace("mailto:", "").split("?")[0];
-        if (isValidEmail(email) && !email.includes("facebook.com")) return email;
+        const raw = href.replace("mailto:", "").split("?")[0];
+        const cleanMatch = raw.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+        if (cleanMatch && isValidEmail(cleanMatch[0]) && !cleanMatch[0].includes("facebook.com")) return cleanMatch[0];
       }
     }
   } catch (err) {
