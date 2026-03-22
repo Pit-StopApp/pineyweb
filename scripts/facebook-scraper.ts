@@ -5,30 +5,36 @@ import * as path from "path";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const PINEYWEB_URL = process.env.PINEYWEB_URL || "https://pineyweb.com";
 const SESSION_FILE = process.env.FACEBOOK_STATE_FILE || "scripts/fb-session.json";
 
 if (!SUPABASE_URL || !SUPABASE_KEY) { console.error("Missing Supabase env vars"); process.exit(1); }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+function ts(): string { return new Date().toLocaleTimeString(); }
+
 const isValidEmail = (v: unknown): v is string =>
   typeof v === "string" && v.includes("@") && v.includes(".");
 
 function randomDelay(minMs: number, maxMs: number): Promise<void> {
   const ms = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
-  console.log(`  Waiting ${Math.round(ms / 1000)}s...`);
+  console.log(`[${ts()}]   Waiting ${Math.round(ms / 1000)}s...`);
   return new Promise(r => setTimeout(r, ms));
 }
 
+function fuzzyClean(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/\b(llc|inc|corp|co|ltd|pllc|pc|pa|dba|and)\b/g, "")
+    .replace(/[&'''",.\-–—]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function fuzzyMatch(pageName: string, businessName: string): boolean {
-  const clean = (s: string) =>
-    s.toLowerCase()
-      .replace(/\b(llc|inc|corp|co|ltd|pllc|pc|pa|dba)\b/g, "")
-      .replace(/[^a-z0-9\s]/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-  const a = clean(pageName);
-  const b = clean(businessName);
+  const a = fuzzyClean(pageName);
+  const b = fuzzyClean(businessName);
   return a.includes(b) || b.includes(a) || a === b;
 }
 
@@ -36,21 +42,19 @@ async function loadOrCreateSession(context: BrowserContext): Promise<void> {
   const sessionPath = path.resolve(SESSION_FILE);
 
   if (fs.existsSync(sessionPath)) {
-    console.log("Loading saved Facebook session...");
+    console.log(`[${ts()}] Loading saved Facebook session...`);
     const cookies = JSON.parse(fs.readFileSync(sessionPath, "utf-8"));
     await context.addCookies(cookies);
-    console.log(`Loaded ${cookies.length} cookies`);
+    console.log(`[${ts()}] Loaded ${cookies.length} cookies`);
     return;
   }
 
-  console.log("\nNo saved session found. Opening Facebook for manual login...");
-  console.log("Log in to Facebook manually, then press Enter in this terminal.\n");
+  console.log(`\n[${ts()}] No saved session found. Opening Facebook for manual login...`);
+  console.log(`[${ts()}] Log in to Facebook manually, then press Enter in this terminal.\n`);
 
   const page = await context.newPage();
   await page.goto("https://www.facebook.com/login");
-  await page.waitForURL("https://www.facebook.com/", { timeout: 300000 }).catch(() => {
-    // User might land on a different URL after login
-  });
+  await page.waitForURL("**/facebook.com/**", { timeout: 300000 }).catch(() => {});
 
   // Wait for user to press Enter
   await new Promise<void>(resolve => {
@@ -61,70 +65,60 @@ async function loadOrCreateSession(context: BrowserContext): Promise<void> {
     });
   });
 
-  // Save cookies
   const cookies = await context.cookies();
   fs.writeFileSync(sessionPath, JSON.stringify(cookies, null, 2));
-  console.log(`Saved ${cookies.length} cookies to ${sessionPath}`);
+  console.log(`[${ts()}] Saved ${cookies.length} cookies to ${sessionPath}`);
   await page.close();
 }
 
 async function extractEmailFromAbout(page: Page): Promise<string | null> {
   try {
-    // Navigate to the About section
-    const currentUrl = page.url();
-    const aboutUrl = currentUrl.replace(/\/$/, "") + "/about";
+    const currentUrl = page.url().replace(/\/$/, "");
+    const aboutUrl = currentUrl + "/about";
+    console.log(`[${ts()}]   Navigating to About: ${aboutUrl}`);
     await page.goto(aboutUrl, { waitUntil: "networkidle", timeout: 15000 });
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(3000);
 
-    // Get all text content from the page
     const bodyText = await page.textContent("body") || "";
-
-    // Look for email patterns in the page text
     const emailPattern = /[\w.+-]+@[\w-]+\.[\w.]+/g;
     const matches = bodyText.match(emailPattern);
+
     if (matches) {
       for (const match of matches) {
-        // Skip Facebook's own emails
         if (match.includes("facebook.com") || match.includes("fb.com")) continue;
+        if (match.includes("example.com")) continue;
         if (isValidEmail(match)) return match;
       }
     }
 
-    // Also try to find email in specific About section elements
-    const aboutSections = await page.locator('[role="main"] span, [role="main"] a[href^="mailto:"]').all();
-    for (const el of aboutSections) {
-      const text = await el.textContent().catch(() => null);
-      if (text) {
-        const elMatches = text.match(emailPattern);
-        if (elMatches) {
-          for (const m of elMatches) {
-            if (!m.includes("facebook.com") && !m.includes("fb.com") && isValidEmail(m)) return m;
-          }
-        }
-      }
-      // Check mailto links
-      const href = await el.getAttribute("href").catch(() => null);
-      if (href?.startsWith("mailto:")) {
+    // Check mailto links
+    const mailtoLinks = await page.locator('a[href^="mailto:"]').all();
+    for (const link of mailtoLinks) {
+      const href = await link.getAttribute("href").catch(() => null);
+      if (href) {
         const email = href.replace("mailto:", "").split("?")[0];
-        if (isValidEmail(email)) return email;
+        if (isValidEmail(email) && !email.includes("facebook.com")) return email;
       }
     }
   } catch (err) {
-    console.log(`  Error extracting email: ${err instanceof Error ? err.message : err}`);
+    console.log(`[${ts()}]   Error in About page: ${err instanceof Error ? err.message : err}`);
   }
-
   return null;
 }
 
+function phoneDigits(phone: string): string {
+  return phone.replace(/[^\d]/g, "").slice(-10);
+}
+
 async function confirmPhoneMatch(page: Page, phone: string | null): Promise<boolean> {
-  if (!phone) return true; // No phone to confirm against
+  if (!phone) return true;
   try {
     const bodyText = await page.textContent("body") || "";
-    const cleanPhone = phone.replace(/[^\d]/g, "");
-    const pagePhones = bodyText.replace(/[^\d\s]/g, " ").match(/\d{10,}/g) || [];
-    return pagePhones.some(p => p.includes(cleanPhone) || cleanPhone.includes(p));
+    const target = phoneDigits(phone);
+    if (target.length < 10) return true;
+    return bodyText.replace(/[^\d]/g, "").includes(target);
   } catch {
-    return true; // Don't block on errors
+    return true;
   }
 }
 
@@ -132,61 +126,105 @@ async function searchFacebook(
   page: Page,
   businessName: string,
   city: string,
-  state: string,
   phone: string | null
 ): Promise<{ url: string | null; email: string | null }> {
-  const query = encodeURIComponent(`${businessName} ${city} ${state}`);
+  const query = encodeURIComponent(`${businessName} ${city} TX`);
   const searchUrl = `https://www.facebook.com/search/pages/?q=${query}`;
 
-  console.log(`  Navigating to search...`);
+  console.log(`[${ts()}]   Searching Facebook: "${businessName} ${city} TX"`);
   await page.goto(searchUrl, { waitUntil: "networkidle", timeout: 30000 });
-  await page.waitForTimeout(3000);
+  await page.waitForTimeout(4000);
 
-  // Check if we're blocked or need login
   if (page.url().includes("/login")) {
-    console.log(`  Redirected to login — session expired`);
+    console.log(`[${ts()}]   Session expired — redirected to login`);
     return { url: null, email: null };
   }
 
-  // Look for search results
-  const resultLinks = await page.locator('a[role="presentation"], a[href*="facebook.com/"]').all();
-  console.log(`  Found ${resultLinks.length} links on page`);
+  // Collect all links that look like Facebook page links
+  const allLinks = await page.locator("a[href]").all();
+  const candidates: { text: string; href: string }[] = [];
 
-  for (const link of resultLinks) {
-    const text = await link.textContent().catch(() => null);
+  for (const link of allLinks) {
     const href = await link.getAttribute("href").catch(() => null);
-
-    if (!text || !href) continue;
+    const text = await link.textContent().catch(() => null);
+    if (!href || !text) continue;
     if (!href.includes("facebook.com/")) continue;
-    // Skip non-page links
-    if (href.includes("/search/") || href.includes("/login") || href.includes("/help")) continue;
+    if (href.includes("/search/") || href.includes("/login") || href.includes("/help") || href.includes("/policies")) continue;
+    if (text.trim().length < 3) continue;
+    candidates.push({ text: text.trim(), href });
+  }
 
+  console.log(`[${ts()}]   Found ${candidates.length} candidate page links`);
+
+  for (const { text, href } of candidates) {
     if (fuzzyMatch(text, businessName)) {
-      console.log(`  Matched: "${text}" → ${href}`);
+      console.log(`[${ts()}]   Matched: "${text}"`);
 
-      // Navigate to the page
       await page.goto(href, { waitUntil: "networkidle", timeout: 15000 });
       await page.waitForTimeout(2000);
 
-      // Confirm phone match
       const phoneOk = await confirmPhoneMatch(page, phone);
       if (!phoneOk) {
-        console.log(`  Phone mismatch — skipping`);
+        console.log(`[${ts()}]   Phone mismatch — wrong page, skipping`);
         continue;
       }
+      console.log(`[${ts()}]   Phone confirmed (or no phone to check)`);
 
-      // Extract email from About
       const email = await extractEmailFromAbout(page);
-      return { url: href, email };
+      return { url: page.url(), email };
     }
   }
 
-  console.log(`  No matching page found`);
+  console.log(`[${ts()}]   No matching Facebook page found`);
   return { url: null, email: null };
 }
 
+async function sendOutreach(prospect: {
+  place_id: string;
+  business_name: string;
+  email: string;
+  city: string;
+  phone: string | null;
+  rating: number | null;
+  review_count: number | null;
+  priority_tier: number;
+}): Promise<boolean> {
+  try {
+    const res = await fetch(`${PINEYWEB_URL}/api/admin/outreach`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prospects: [{
+          place_id: prospect.place_id,
+          business_name: prospect.business_name,
+          email: prospect.email,
+          email_source: "Facebook",
+          address: "",
+          city: prospect.city,
+          phone: prospect.phone,
+          rating: prospect.rating,
+          review_count: prospect.review_count || 0,
+          priority_tier: prospect.priority_tier,
+        }],
+      }),
+    });
+    const data = await res.json();
+    if (data.sent > 0) {
+      console.log(`[${ts()}]   Outreach sent successfully`);
+      return true;
+    } else {
+      console.log(`[${ts()}]   Outreach skipped (dedup or error): ${JSON.stringify(data)}`);
+      return false;
+    }
+  } catch (err) {
+    console.log(`[${ts()}]   Outreach failed: ${err instanceof Error ? err.message : err}`);
+    return false;
+  }
+}
+
 async function main() {
-  // Fetch prospects
+  console.log(`[${ts()}] Facebook Scraper starting...\n`);
+
   const { data: prospects, error } = await supabase
     .from("pineyweb_prospects")
     .select("id, place_id, business_name, phone, city, rating, review_count, priority_tier")
@@ -195,14 +233,13 @@ async function main() {
     .gte("review_count", 5)
     .order("priority_tier", { ascending: true })
     .order("rating", { ascending: false })
-    .limit(10);
+    .limit(5);
 
   if (error) { console.error("Supabase error:", error.message); process.exit(1); }
   if (!prospects || prospects.length === 0) { console.log("No prospects found"); return; }
 
-  console.log(`Facebook Scraper — ${prospects.length} prospects to search\n`);
+  console.log(`[${ts()}] Loaded ${prospects.length} prospects\n`);
 
-  // Launch browser (non-headless)
   const browser = await chromium.launch({
     headless: false,
     args: ["--disable-blink-features=AutomationControlled"],
@@ -212,71 +249,69 @@ async function main() {
     viewport: { width: 1440, height: 900 },
   });
 
-  // Load or create session
   await loadOrCreateSession(context);
-
   const page = await context.newPage();
+
   let hits = 0;
-  let tested = 0;
+  let emailsSent = 0;
 
   for (let i = 0; i < prospects.length; i++) {
     const p = prospects[i];
-    tested++;
-
-    console.log(`\n[${tested}/${prospects.length}] ${p.business_name} (${p.city}) — T${p.priority_tier}, ${p.rating}★, ${p.review_count} reviews`);
+    console.log(`\n[${ts()}] [${i + 1}/${prospects.length}] ${p.business_name} (${p.city}) — T${p.priority_tier}, ${p.rating}★, ${p.review_count} reviews`);
 
     try {
-      const { url, email } = await searchFacebook(page, p.business_name, p.city, "TX", p.phone);
+      const { url, email } = await searchFacebook(page, p.business_name, p.city, p.phone);
 
       if (email) {
         hits++;
-        console.log(`  ✓ EMAIL FOUND: ${email}`);
-        console.log(`    Facebook: ${url}`);
+        console.log(`[${ts()}]   ✓ EMAIL FOUND: ${email}`);
+        console.log(`[${ts()}]   Facebook page: ${url}`);
 
-        // Save to database
+        // Save email to database
         const { error: updateErr } = await supabase
           .from("pineyweb_prospects")
           .update({ email, email_source: "Facebook" })
           .eq("place_id", p.place_id);
 
         if (updateErr) {
-          console.log(`    Save failed: ${updateErr.message}`);
+          console.log(`[${ts()}]   DB save failed: ${updateErr.message}`);
         } else {
-          console.log(`    Saved to database`);
+          console.log(`[${ts()}]   Saved to database`);
+
+          // Send cold outreach immediately
+          const sent = await sendOutreach({ ...p, email });
+          if (sent) {
+            emailsSent++;
+            // emailed_at is set by the outreach route on successful send
+          }
         }
       } else if (url) {
-        console.log(`  ✗ Page found but no email: ${url}`);
+        console.log(`[${ts()}]   ✗ Page found but no email: ${url}`);
       } else {
-        console.log(`  ✗ No Facebook page found`);
+        console.log(`[${ts()}]   ✗ No Facebook page found`);
       }
     } catch (err) {
-      console.log(`  ✗ Error: ${err instanceof Error ? err.message : err}`);
+      console.log(`[${ts()}]   ✗ Error: ${err instanceof Error ? err.message : err}`);
     }
 
-    // Break every 25 searches (10-15 min)
-    if (tested > 0 && tested % 25 === 0) {
-      const breakMin = Math.floor(Math.random() * 6) + 10;
-      console.log(`\n--- Taking a ${breakMin} minute break ---`);
-      await new Promise(r => setTimeout(r, breakMin * 60 * 1000));
-    }
-
-    // Random delay between searches (2-4 minutes)
+    // Random delay 2-4 minutes between searches
     if (i < prospects.length - 1) {
       await randomDelay(120000, 240000);
     }
   }
 
-  // Save session cookies after run
+  // Save session cookies
   const cookies = await context.cookies();
   fs.writeFileSync(path.resolve(SESSION_FILE), JSON.stringify(cookies, null, 2));
-  console.log(`\nSession cookies saved.`);
+  console.log(`\n[${ts()}] Session cookies saved.`);
 
   await browser.close();
 
   console.log(`\n=== Results ===`);
-  console.log(`Tested: ${tested}`);
-  console.log(`Hits: ${hits}`);
-  console.log(`Hit rate: ${tested > 0 ? ((hits / tested) * 100).toFixed(1) : 0}%`);
+  console.log(`Tested: ${prospects.length}`);
+  console.log(`Emails found: ${hits}`);
+  console.log(`Outreach sent: ${emailsSent}`);
+  console.log(`Hit rate: ${prospects.length > 0 ? ((hits / prospects.length) * 100).toFixed(1) : 0}%`);
 }
 
 main();
