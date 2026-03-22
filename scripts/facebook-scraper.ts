@@ -5,7 +5,6 @@ import * as path from "path";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const PINEYWEB_URL = process.env.PINEYWEB_URL || "https://pineyweb.com";
 const SESSION_FILE = process.env.FACEBOOK_STATE_FILE || "scripts/fb-session.json";
 const PERSONAL_PROFILE_MARKERS = ["dustin.hartman", "dustinhartman", "hitmanhartman"];
 
@@ -626,50 +625,6 @@ async function searchFacebook(
   return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
 }
 
-// --- Outreach ---
-async function sendOutreach(prospect: {
-  place_id: string;
-  business_name: string;
-  email: string;
-  city: string;
-  phone: string | null;
-  rating: number | null;
-  review_count: number | null;
-  priority_tier: number;
-}): Promise<boolean> {
-  try {
-    const res = await fetch(`${PINEYWEB_URL}/api/admin/outreach`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        prospects: [{
-          place_id: prospect.place_id,
-          business_name: prospect.business_name,
-          email: prospect.email,
-          email_source: "Facebook",
-          address: "",
-          city: prospect.city,
-          phone: prospect.phone,
-          rating: prospect.rating,
-          review_count: prospect.review_count || 0,
-          priority_tier: prospect.priority_tier,
-        }],
-      }),
-    });
-    const data = await res.json();
-    if (data.sent > 0) {
-      console.log(`[${ts()}]   Outreach sent successfully`);
-      return true;
-    } else {
-      console.log(`[${ts()}]   Outreach skipped (dedup or error): ${JSON.stringify(data)}`);
-      return false;
-    }
-  } catch (err) {
-    console.log(`[${ts()}]   Outreach failed: ${err instanceof Error ? err.message : err}`);
-    return false;
-  }
-}
-
 // --- Main ---
 async function main() {
   console.log(`[${ts()}] Facebook Scraper starting...\n`);
@@ -721,7 +676,7 @@ async function main() {
 
   let tested = 0;
   let emailsFound = 0;
-  let outreachSent = 0;
+  let emailsSaved = 0;
   let skipped = 0; // inactive + has website
   let noFacebook = 0;
   let noEmail = 0;
@@ -816,7 +771,7 @@ async function main() {
 
   function logProgress() {
     const hitRate = tested > 0 ? ((emailsFound / tested) * 100).toFixed(1) : "0.0";
-    console.log(`\n[Progress] ${tested}/${total} | Emails found: ${emailsFound} | Sent: ${outreachSent} | Skipped: ${skipped} | No Facebook: ${noFacebook} | No email: ${noEmail} | Hit rate: ${hitRate}%`);
+    console.log(`\n[Progress] ${tested}/${total} | Emails found: ${emailsFound} | Saved: ${emailsSaved} | Skipped: ${skipped} | No Facebook: ${noFacebook} | No email: ${noEmail} | Hit rate: ${hitRate}%`);
   }
 
   process.on("SIGINT", () => {
@@ -825,7 +780,7 @@ async function main() {
     console.log("=== Session Summary ===");
     console.log(`Tested: ${tested}`);
     console.log(`Emails found: ${emailsFound}`);
-    console.log(`Outreach sent: ${outreachSent}`);
+    console.log(`Emails saved to CRM: ${emailsSaved}`);
     console.log(`Skipped: ${skipped}`);
     console.log(`No Facebook: ${noFacebook}`);
     console.log(`No email: ${noEmail}`);
@@ -905,7 +860,8 @@ async function main() {
           console.log(`[${ts()}]   DB save failed: ${updateErr.message}`);
           rowNotes = "db save failed";
         } else {
-          console.log(`[${ts()}]   ✓ EMAIL SAVED: ${email} — outreach paused for review`);
+          emailsSaved++;
+          console.log(`[${ts()}]   ✓ Email saved — outreach pending review`);
         }
         if (!phoneConfirmed) rowNotes = rowNotes ? `${rowNotes}, phone mismatch` : "phone mismatch";
       } else if (url) {
@@ -981,7 +937,7 @@ async function main() {
   console.log(`\n=== Results ===`);
   console.log(`Tested: ${tested}`);
   console.log(`Emails found: ${emailsFound}`);
-  console.log(`Outreach sent: ${outreachSent}`);
+  console.log(`Emails saved to CRM: ${emailsSaved}`);
   console.log(`Skipped: ${skipped}`);
   console.log(`No Facebook: ${noFacebook}`);
   console.log(`No email: ${noEmail}`);
