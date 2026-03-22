@@ -71,38 +71,60 @@ async function loadOrCreateSession(context: BrowserContext): Promise<void> {
   await page.close();
 }
 
-async function extractEmailFromAbout(page: Page): Promise<string | null> {
+const SYSTEM_EMAIL_DOMAINS = ["facebook.com", "fb.com", "sentry.io", "example.com", "fbcdn.net"];
+
+function extractEmailFromText(text: string): string | null {
+  const matches = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
+  if (!matches) return null;
+  for (const match of matches) {
+    if (SYSTEM_EMAIL_DOMAINS.some(d => match.includes(d))) continue;
+    if (isValidEmail(match)) return match;
+  }
+  return null;
+}
+
+async function extractEmail(page: Page): Promise<string | null> {
   try {
-    const currentUrl = page.url().replace(/\/$/, "");
-    const aboutUrl = currentUrl.includes("profile.php?id=")
-      ? currentUrl + "&sk=about_contact_and_basic_info"
-      : currentUrl + "/directory_contact_info";
-    console.log(`[${ts()}]   Navigating to contact info: ${aboutUrl}`);
-    await page.goto(aboutUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
-    await page.waitForTimeout(3000);
-
-    const bodyText = await page.textContent("body") || "";
-    const emailMatch = bodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-
-    if (emailMatch) {
-      const email = emailMatch[0];
-      if (!email.includes("facebook.com") && !email.includes("fb.com") && !email.includes("example.com") && isValidEmail(email)) {
-        return email;
-      }
+    // Step 1: Scan the main page content immediately
+    console.log(`[${ts()}]   Scanning main page for email...`);
+    const mainText = await page.textContent("body") || "";
+    const mainEmail = extractEmailFromText(mainText);
+    if (mainEmail) {
+      console.log(`[${ts()}]   Email found on main page`);
+      return mainEmail;
     }
 
-    // Check mailto links as fallback
+    // Check mailto links on main page
     const mailtoLinks = await page.locator('a[href^="mailto:"]').all();
     for (const link of mailtoLinks) {
       const href = await link.getAttribute("href").catch(() => null);
       if (href) {
         const raw = href.replace("mailto:", "").split("?")[0];
-        const cleanMatch = raw.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-        if (cleanMatch && isValidEmail(cleanMatch[0]) && !cleanMatch[0].includes("facebook.com")) return cleanMatch[0];
+        const email = extractEmailFromText(raw);
+        if (email) {
+          console.log(`[${ts()}]   Email found via mailto link`);
+          return email;
+        }
       }
     }
+
+    // Step 2: Fallback — navigate to contact info page
+    const currentUrl = page.url().replace(/\/$/, "");
+    const contactUrl = currentUrl.includes("profile.php?id=")
+      ? currentUrl + "&sk=about_contact_and_basic_info"
+      : currentUrl + "/directory_contact_info";
+    console.log(`[${ts()}]   No email on main page, trying: ${contactUrl}`);
+    await page.goto(contactUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
+    await page.waitForTimeout(3000);
+
+    const contactText = await page.textContent("body") || "";
+    const contactEmail = extractEmailFromText(contactText);
+    if (contactEmail) {
+      console.log(`[${ts()}]   Email found on contact info page`);
+      return contactEmail;
+    }
   } catch (err) {
-    console.log(`[${ts()}]   Error in About page: ${err instanceof Error ? err.message : err}`);
+    console.log(`[${ts()}]   Error extracting email: ${err instanceof Error ? err.message : err}`);
   }
   return null;
 }
@@ -171,7 +193,7 @@ async function searchFacebook(
         console.log(`[${ts()}]   Phone mismatch but name/city match, proceeding`);
       }
 
-      const email = await extractEmailFromAbout(page);
+      const email = await extractEmail(page);
       return { url: page.url(), email };
     }
   }
