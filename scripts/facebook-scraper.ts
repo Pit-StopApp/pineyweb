@@ -152,16 +152,29 @@ function isRedirectedToPersonalProfile(url: string): boolean {
 
 // --- Clean email extraction ---
 function extractCleanEmail(text: string): string | null {
-  // Use regex with word boundaries to extract email from surrounding text
-  const regex = /\b[a-zA-Z][a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b/g;
+  // Find all potential email patterns — no word boundary so we catch concatenated text
+  const regex = /[a-zA-Z][a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
   const matches = text.match(regex);
   if (!matches) return null;
-  return matches.find(e =>
-    !e.includes("@facebook.com") &&
-    !e.includes("@fb.com") &&
-    !e.includes("@sentry") &&
-    e.length < 100
-  ) || null;
+
+  for (const match of matches) {
+    // Progressively trim trailing characters until we get a valid email
+    const emailRegex = /^[a-zA-Z][a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    let email = match;
+    while (email.length > 0) {
+      if (emailRegex.test(email)) {
+        if (!email.includes("@facebook.com") &&
+            !email.includes("@fb.com") &&
+            !email.includes("@sentry") &&
+            email.length < 100) {
+          return email;
+        }
+        break;
+      }
+      email = email.slice(0, -1);
+    }
+  }
+  return null;
 }
 
 // --- Fuzzy matching with unique word requirement ---
