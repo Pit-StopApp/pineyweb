@@ -29,7 +29,9 @@ export default function ProspectsPage() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
-  const [expandedNote, setExpandedNote] = useState<string | null>(null);
+  const [notesModal, setNotesModal] = useState<{ id: string; name: string; notes: string } | null>(null);
+  const [notesDraft, setNotesDraft] = useState("");
+  const [notesSaved, setNotesSaved] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(25);
@@ -68,6 +70,19 @@ export default function ProspectsPage() {
   const updateProspect = async (id: string, updates: Record<string, string | null>) => {
     await fetch("/api/admin/prospects", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, ...updates }) });
     setProspects(prev => prev.map(p => p.id === id ? { ...p, ...updates, updated_at: new Date().toISOString() } : p));
+  };
+
+  const openNotesModal = (p: Prospect) => {
+    setNotesDraft(p.notes || "");
+    setNotesSaved(false);
+    setNotesModal({ id: p.id, name: p.business_name, notes: p.notes || "" });
+  };
+
+  const saveNotes = async () => {
+    if (!notesModal) return;
+    await updateProspect(notesModal.id, { notes: notesDraft });
+    setNotesSaved(true);
+    setTimeout(() => { setNotesModal(null); setNotesSaved(false); }, 800);
   };
 
   const handleLogout = async () => { await supabase.auth.signOut(); router.push("/login"); };
@@ -280,7 +295,7 @@ export default function ProspectsPage() {
                       {p.email_spam && <span title="Marked as spam" className="ml-1" style={{ fontSize: "14px" }}>⚠️</span>}
                       {p.email_delivered && !p.email_spam && <span title="Email delivered" className="ml-1" style={{ fontSize: "14px" }}>✅</span>}
                     </td>
-                    <td className="py-3 px-3 text-sm truncate cursor-pointer" style={{ color: p.notes ? "#414942" : "#c1c9bf" }} title={p.notes || ""} onClick={() => setExpandedNote(expandedNote === p.id ? null : p.id)}>
+                    <td className="py-3 px-3 text-sm truncate cursor-pointer" style={{ color: p.notes ? "#414942" : "#c1c9bf" }} onClick={() => openNotesModal(p)}>
                       {p.notes ? (p.notes.length > 20 ? p.notes.slice(0, 20) + "..." : p.notes) : "—"}
                     </td>
                     <td className="py-3 px-3 pr-6 text-right">
@@ -291,7 +306,7 @@ export default function ProspectsPage() {
                         }} title="Cycle status" className="w-8 h-8 rounded flex items-center justify-center transition-colors hover:bg-[#e7e2da]">
                           <span className="material-symbols-outlined text-[18px]" style={{ color: "#316342" }}>rule</span>
                         </button>
-                        <button onClick={() => setExpandedNote(expandedNote === p.id ? null : p.id)} title="Notes" className="w-8 h-8 rounded flex items-center justify-center transition-colors hover:bg-[#e7e2da]">
+                        <button onClick={() => openNotesModal(p)} title="Notes" className="w-8 h-8 rounded flex items-center justify-center transition-colors hover:bg-[#e7e2da]">
                           <span className="material-symbols-outlined text-[18px]" style={{ color: p.notes ? "#805533" : "#c1c9bf" }}>notes</span>
                         </button>
                         <button onClick={() => {
@@ -305,27 +320,6 @@ export default function ProspectsPage() {
                   </tr>
                 );
               })}
-              {expandedNote && paginated.find(p => p.id === expandedNote) && (
-                <tr>
-                  <td colSpan={8} className="p-0">
-                    <div className="px-6 py-5 border-b" style={{ borderLeft: "4px solid #316342", borderColor: "rgba(193,201,191,0.15)", backgroundColor: "rgba(254,249,241,0.5)" }}>
-                      <span className="text-[10px] uppercase tracking-widest font-bold mb-3 block" style={{ color: "#805533" }}>Interaction History &amp; Context</span>
-                      <textarea
-                        defaultValue={paginated.find(p => p.id === expandedNote)?.notes || ""}
-                        onBlur={e => updateProspect(expandedNote, { notes: e.target.value })}
-                        placeholder="Add notes about this prospect..."
-                        className="w-full p-3 rounded-lg border text-sm resize-none mb-2"
-                        style={{ borderColor: "#c1c9bf", backgroundColor: "#ffffff" }}
-                        rows={3}
-                      />
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] italic" style={{ color: "#717971" }}>Last edited: {paginated.find(p => p.id === expandedNote)?.updated_at ? new Date(paginated.find(p => p.id === expandedNote)!.updated_at).toLocaleString() : "Never"}</span>
-                        <button onClick={() => setExpandedNote(null)} className="px-4 py-1.5 rounded-md text-xs font-bold text-white" style={{ backgroundColor: "#316342" }}>Save Note</button>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              )}
               {paginated.length === 0 && <tr><td colSpan={8} className="py-16 text-center text-sm" style={{ color: "#414942" }}>No prospects found</td></tr>}
             </tbody>
           </table>
@@ -363,6 +357,41 @@ export default function ProspectsPage() {
           )}
         </div>
       </main>
+
+      {/* Notes Modal */}
+      {notesModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }} onClick={() => setNotesModal(null)}>
+          <div className="w-full max-w-lg rounded-xl shadow-xl" style={{ backgroundColor: "#F5F0E8" }} onClick={e => e.stopPropagation()}>
+            <div className="px-6 pt-6 pb-2">
+              <h3 className="text-xl font-bold truncate" style={{ color: "#1d1c17" }}>{notesModal.name}</h3>
+              <span className="text-[10px] uppercase tracking-widest font-bold mt-1 block" style={{ color: "#805533" }}>Notes</span>
+            </div>
+            <div className="px-6 pb-6">
+              {notesSaved ? (
+                <div className="flex items-center justify-center py-8">
+                  <span className="text-lg font-semibold" style={{ color: "#316342" }}>Saved ✓</span>
+                </div>
+              ) : (
+                <>
+                  <textarea
+                    value={notesDraft}
+                    onChange={e => setNotesDraft(e.target.value)}
+                    placeholder="Add notes about this prospect..."
+                    className="w-full p-3 rounded-lg border text-sm resize-none mt-2"
+                    style={{ borderColor: "#c1c9bf", backgroundColor: "#ffffff", color: "#1d1c17" }}
+                    rows={5}
+                    autoFocus
+                  />
+                  <div className="flex gap-3 mt-4 justify-end">
+                    <button onClick={() => setNotesModal(null)} className="px-5 py-2.5 rounded-md text-sm font-bold border" style={{ color: "#414942", borderColor: "#c1c9bf" }}>Cancel</button>
+                    <button onClick={saveNotes} className="px-5 py-2.5 rounded-md text-sm font-bold text-white" style={{ backgroundColor: "#316342" }}>Save</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* FAB */}
       <Link href="/admin/scanner" className="fixed bottom-8 right-8 w-14 h-14 rounded-full flex items-center justify-center text-white z-50 shadow-lg transition-transform hover:scale-105 active:scale-95" style={{ backgroundColor: "#316342" }}>
