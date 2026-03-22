@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 
 interface Prospect {
   id: string; place_id: string; business_name: string; city: string; phone: string | null;
   priority_tier: number; outreach_status: string; follow_up_date: string | null; notes: string | null;
+  website_url?: string | null; google_maps_url?: string | null; google_place_types?: string[] | null;
   email: string | null; email_source: string | null; emailed_at: string | null; contact_method: string | null; rating: number | null; review_count: number | null; email_delivered: boolean; email_spam: boolean; facebook_url: string | null; created_at: string; updated_at: string;
 }
 
@@ -26,6 +27,8 @@ const PAGE_SIZES = [10, 25, 50, 100];
 
 export default function ProspectsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [clientSlug, setClientSlug] = useState(searchParams.get("client") || "piney-web");
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -63,9 +66,11 @@ export default function ProspectsPage() {
     init();
   }, [router]);
 
-  const loadProspects = async (status?: string) => {
-    const url = status && status !== "all" ? `/api/admin/prospects?status=${status}` : "/api/admin/prospects";
-    const res = await fetch(url);
+  const loadProspects = async (status?: string, slug?: string) => {
+    const cs = slug || clientSlug;
+    const params = new URLSearchParams({ client_slug: cs });
+    if (status && status !== "all") params.set("status", status);
+    const res = await fetch(`/api/admin/prospects?${params}`);
     const data = await res.json();
     setProspects(data.data || []);
     setTotalCount(data.count ?? (data.data || []).length);
@@ -73,7 +78,7 @@ export default function ProspectsPage() {
   };
 
   const updateProspect = async (id: string, updates: Record<string, string | null>) => {
-    await fetch("/api/admin/prospects", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, ...updates }) });
+    await fetch(`/api/admin/prospects?client_slug=${clientSlug}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, ...updates }) });
     setProspects(prev => prev.map(p => p.id === id ? { ...p, ...updates, updated_at: new Date().toISOString() } : p));
   };
 
@@ -153,7 +158,7 @@ export default function ProspectsPage() {
       const res = await fetch("/api/admin/scanner", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ city: scanCity.trim(), state: "TX", radius: Number(scanRadius) }),
+        body: JSON.stringify({ city: scanCity.trim(), state: "TX", radius: Number(scanRadius), client_slug: clientSlug }),
       });
       const data = await res.json();
       const newCount = data.prospects_saved || 0;
@@ -165,6 +170,28 @@ export default function ProspectsPage() {
     }
     setScanning(false);
     setTimeout(() => setScanResult(""), 8000);
+  };
+
+  const exportToExcel = async () => {
+    const XLSX = await import("xlsx");
+    const rows = sorted.map(p => ({
+      "Business Name": p.business_name,
+      "Address": (p as Record<string, unknown>).address || "",
+      "City": p.city,
+      "Phone": p.phone || "",
+      "Website": p.website_url || "",
+      "Google Maps": p.google_maps_url || "",
+      "Rating": p.rating || "",
+      "Reviews": p.review_count || "",
+      "Priority": `T${p.priority_tier}`,
+      "Status": p.outreach_status,
+      "Notes": p.notes || "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Prospects");
+    const date = new Date().toISOString().split("T")[0];
+    XLSX.writeFile(wb, `${clientSlug}-leads-${date}.xlsx`);
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#fef9f1" }}><p style={{ color: "#414942" }}>Loading...</p></div>;
@@ -217,6 +244,15 @@ export default function ProspectsPage() {
       </header>
 
       <main className="flex-grow max-w-screen-xl mx-auto w-full px-8 py-16">
+        {/* Client Switcher */}
+        <div className="flex gap-2 mb-6">
+          {[{ slug: "piney-web", label: "Piney Web" }, { slug: "sip-society", label: "Sip Society" }].map(c => (
+            <button key={c.slug} onClick={() => { setClientSlug(c.slug); setFilter("all"); setPage(0); loadProspects("all", c.slug); router.push(`/admin/prospects?client=${c.slug}`); }} className="px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-colors" style={clientSlug === c.slug ? { backgroundColor: "#316342", color: "#fff" } : { backgroundColor: "rgba(193,201,191,0.2)", color: "#414942" }}>
+              {c.label}
+            </button>
+          ))}
+        </div>
+
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
           <div>
@@ -224,9 +260,16 @@ export default function ProspectsPage() {
             <h1 className="text-5xl font-bold tracking-tight mb-2" style={{ color: "#1d1c17" }}>Prospects <span className="text-2xl font-normal" style={{ color: "#717971" }}>({totalCount.toLocaleString()})</span></h1>
             <p className="text-lg italic" style={{ color: "#414942" }}>Track outreach progress for every potential client in your pipeline.</p>
           </div>
-          <div className="relative">
-            <input value={search} onChange={e => { setSearch(e.target.value); setPage(0); }} placeholder="Search by name or city..." className="pl-10 pr-4 py-2.5 rounded-lg border text-sm w-64" style={{ borderColor: "#c1c9bf", backgroundColor: "#ffffff" }} />
-            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px]" style={{ color: "#c1c9bf" }}>search</span>
+          <div className="flex items-center gap-3">
+            {clientSlug === "sip-society" && (
+              <button onClick={exportToExcel} className="px-4 py-2.5 rounded-lg border text-sm font-bold transition-colors hover:bg-[#f2ede5]" style={{ borderColor: "#c1c9bf", color: "#316342" }}>
+                <span className="material-symbols-outlined text-[16px] align-middle mr-1">download</span>Export Excel
+              </button>
+            )}
+            <div className="relative">
+              <input value={search} onChange={e => { setSearch(e.target.value); setPage(0); }} placeholder="Search by name or city..." className="pl-10 pr-4 py-2.5 rounded-lg border text-sm w-64" style={{ borderColor: "#c1c9bf", backgroundColor: "#ffffff" }} />
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px]" style={{ color: "#c1c9bf" }}>search</span>
+            </div>
           </div>
         </div>
 
