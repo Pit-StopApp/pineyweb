@@ -727,8 +727,10 @@ async function main() {
   let noEmail = 0;
   const total = prospects.length;
 
-  // --- Session report ---
+  // --- Session report (master CSV) ---
   type SessionRow = {
+    session_date: string;
+    session_id: string;
     prospect_name: string;
     facebook_page_found: string;
     match_type: string;
@@ -742,8 +744,11 @@ async function main() {
   const sessionRows: SessionRow[] = [];
   const reportsDir = path.resolve("scripts/session-reports");
   if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
-  const reportTimestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  const reportPath = path.join(reportsDir, `report-${reportTimestamp}.csv`);
+  const masterPath = path.join(reportsDir, "master-report.csv");
+  const sessionStart = new Date();
+  const sessionDate = sessionStart.toISOString();
+  const sessionId = `session-${sessionStart.toISOString().replace(/[:.]/g, "-").slice(0, 19)}`;
+  const CSV_HEADER = "session_date,session_id,prospect_name,facebook_page_found,match_type,phone_confirmed,email_found,email_sent,facebook_url,city,notes";
 
   function csvEscape(val: string): string {
     if (val.includes(",") || val.includes('"') || val.includes("\n")) {
@@ -752,16 +757,61 @@ async function main() {
     return val;
   }
 
+  function rowToCsv(r: SessionRow): string {
+    return [r.session_date, r.session_id, r.prospect_name, r.facebook_page_found, r.match_type, r.phone_confirmed, r.email_found, r.email_sent, r.facebook_url, r.city, r.notes]
+      .map(csvEscape)
+      .join(",");
+  }
+
+  // Consolidate any old individual report-*.csv files into master
+  function consolidateOldReports() {
+    const files = fs.readdirSync(reportsDir).filter(f => f.startsWith("report-") && f.endsWith(".csv"));
+    if (files.length === 0) return;
+    console.log(`[${ts()}] Consolidating ${files.length} old report file(s) into master...`);
+
+    for (const file of files) {
+      const filePath = path.join(reportsDir, file);
+      const content = fs.readFileSync(filePath, "utf-8").trim();
+      const lines = content.split("\n").slice(1); // skip header
+      if (lines.length === 0) { fs.unlinkSync(filePath); continue; }
+
+      // Derive session_date and session_id from filename: report-2026-03-22T14-30-00.csv
+      const tsMatch = file.match(/report-(.+)\.csv$/);
+      const oldTs = tsMatch ? tsMatch[1].replace(/-/g, (m, offset: number) => offset <= 9 ? "-" : ":").replace(/T(\d+):(\d+):(\d+)$/, "T$1:$2:$3") : sessionDate;
+      // Reconstruct a valid ISO date from the filename
+      const parts = file.replace("report-", "").replace(".csv", "").split("T");
+      const datePart = parts[0]; // 2026-03-22
+      const timePart = parts[1] ? parts[1].replace(/-/g, ":") : "00:00:00"; // 14:30:00
+      const oldSessionDate = `${datePart}T${timePart}.000Z`;
+      const oldSessionId = `session-${parts.join("T").replace(/:/g, "-")}`;
+
+      // Append old rows with session columns prepended
+      const augmentedLines = lines.map(line => `${csvEscape(oldSessionDate)},${csvEscape(oldSessionId)},${line}`);
+
+      if (fs.existsSync(masterPath)) {
+        fs.appendFileSync(masterPath, augmentedLines.join("\n") + "\n");
+      } else {
+        fs.writeFileSync(masterPath, CSV_HEADER + "\n" + augmentedLines.join("\n") + "\n");
+      }
+
+      fs.unlinkSync(filePath);
+      console.log(`[${ts()}]   Merged ${lines.length} rows from ${file}`);
+    }
+  }
+
+  consolidateOldReports();
+
   function saveReport() {
     if (sessionRows.length === 0) return;
-    const header = "prospect_name,facebook_page_found,match_type,phone_confirmed,email_found,email_sent,facebook_url,city,notes";
-    const lines = sessionRows.map(r =>
-      [r.prospect_name, r.facebook_page_found, r.match_type, r.phone_confirmed, r.email_found, r.email_sent, r.facebook_url, r.city, r.notes]
-        .map(csvEscape)
-        .join(",")
-    );
-    fs.writeFileSync(reportPath, header + "\n" + lines.join("\n") + "\n");
-    console.log(`[${ts()}] Report saved: ${reportPath} (${sessionRows.length} rows)`);
+    const newLines = sessionRows.map(rowToCsv).join("\n") + "\n";
+
+    if (fs.existsSync(masterPath)) {
+      fs.appendFileSync(masterPath, newLines);
+    } else {
+      fs.writeFileSync(masterPath, CSV_HEADER + "\n" + newLines);
+    }
+    console.log(`[${ts()}] Report saved: ${masterPath} (${sessionRows.length} new rows, session: ${sessionId})`);
+    sessionRows.length = 0; // clear so we don't double-write on next save
   }
 
   function logProgress() {
@@ -855,9 +905,7 @@ async function main() {
           console.log(`[${ts()}]   DB save failed: ${updateErr.message}`);
           rowNotes = "db save failed";
         } else {
-          console.log(`[${ts()}]   Saved to database`);
-          const sent = await sendOutreach({ ...p, email });
-          if (sent) { outreachSent++; emailSentThisRow = true; }
+          console.log(`[${ts()}]   ✓ EMAIL SAVED: ${email} — outreach paused for review`);
         }
         if (!phoneConfirmed) rowNotes = rowNotes ? `${rowNotes}, phone mismatch` : "phone mismatch";
       } else if (url) {
@@ -880,6 +928,8 @@ async function main() {
       }
 
       sessionRows.push({
+        session_date: sessionDate,
+        session_id: sessionId,
         prospect_name: p.business_name,
         facebook_page_found: matchedPageName,
         match_type: matchType,
@@ -897,6 +947,8 @@ async function main() {
     } catch (err) {
       console.log(`[${ts()}]   ✗ Error: ${err instanceof Error ? err.message : err}`);
       sessionRows.push({
+        session_date: sessionDate,
+        session_id: sessionId,
         prospect_name: p.business_name,
         facebook_page_found: "",
         match_type: "no_match",
