@@ -409,7 +409,7 @@ async function main() {
   const prospects = rawProspects.filter(p =>
     !p.facebook_url &&
     p.notes !== "No Facebook presence"
-  ).slice(0, 5);
+  ).slice(0, 50);
 
   if (prospects.length === 0) { console.log("All prospects already searched"); return; }
 
