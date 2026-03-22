@@ -21,11 +21,25 @@ function randomDelay(minMs: number, maxMs: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
 }
 
-async function randomScroll(page: Page) {
+async function humanScroll(page: Page) {
   const scrolls = Math.floor(Math.random() * 3) + 2;
   for (let i = 0; i < scrolls; i++) {
     await page.mouse.wheel(0, Math.floor(Math.random() * 300) + 100);
     await page.waitForTimeout(Math.floor(Math.random() * 1000) + 500);
+    // 25% chance of scrolling back up slightly
+    if (Math.random() < 0.25) {
+      await page.mouse.wheel(0, -(Math.floor(Math.random() * 100) + 50));
+      await page.waitForTimeout(Math.floor(Math.random() * 500) + 300);
+    }
+  }
+}
+
+async function humanClick(page: Page, selector: string) {
+  const element = await page.$(selector);
+  if (element) {
+    await element.hover();
+    await page.waitForTimeout(Math.floor(Math.random() * 500) + 500);
+    await element.click();
   }
 }
 
@@ -41,11 +55,18 @@ async function randomMouseMove(page: Page) {
 }
 
 async function humanType(page: Page, selector: string, text: string) {
-  // Before clicking search bar
-  await page.waitForTimeout(Math.floor(Math.random() * 1000) + 1000);
-  await page.click(selector);
-  for (const char of text) {
-    await page.keyboard.type(char, { delay: Math.floor(Math.random() * 70) + 80 });
+  await humanClick(page, selector);
+  await page.waitForTimeout(Math.floor(Math.random() * 1000) + 500);
+  for (let i = 0; i < text.length; i++) {
+    await page.keyboard.type(text[i], { delay: Math.floor(Math.random() * 70) + 80 });
+    // 30% chance of mistype on any character except last 3
+    if (i < text.length - 3 && Math.random() < 0.3) {
+      const wrongChars = "abcdefghijklmnopqrstuvwxyz";
+      await page.keyboard.type(wrongChars[Math.floor(Math.random() * wrongChars.length)]);
+      await page.waitForTimeout(Math.floor(Math.random() * 300) + 200);
+      await page.keyboard.press("Backspace");
+      await page.waitForTimeout(Math.floor(Math.random() * 200) + 100);
+    }
   }
   // After finishing typing, human reviews query before pressing Enter
   await page.waitForTimeout(Math.floor(Math.random() * 2000) + 1000);
@@ -57,7 +78,7 @@ async function feedBreak(page: Page) {
   const waitTime = Math.floor(Math.random() * 10000) + 10000; // 10-20s
   const scrollCount = Math.floor(waitTime / 3000);
   for (let i = 0; i < scrollCount; i++) {
-    await randomScroll(page);
+    await humanScroll(page);
     await page.waitForTimeout(Math.floor(Math.random() * 2000) + 1500);
   }
   await randomMouseMove(page);
@@ -253,7 +274,7 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
     await page.goto(contactUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
     // Human reads contact info page
     await page.waitForTimeout(Math.floor(Math.random() * 2000) + 2000);
-    await randomScroll(page);
+    await humanScroll(page);
 
     if (isRedirectedToPersonalProfile(page.url())) {
       console.log(`[${ts()}]   Redirected to personal profile — skipping`);
@@ -335,9 +356,18 @@ async function tryMatchCandidates(
       await page.goto(href, { waitUntil: "domcontentloaded", timeout: 15000 });
       // Human reads the business page
       await page.waitForTimeout(Math.floor(Math.random() * 3000) + 2000);
+
+      // Pause on images if visible — as if looking at photos
+      const hasPhotos = await page.locator('img[src*="fbcdn"], img[src*="scontent"]').first().isVisible().catch(() => false);
+      if (hasPhotos) {
+        const photoDelay = Math.floor(Math.random() * 2000) + 2000; // 2-4s
+        console.log(`[${ts()}]   Photos visible — pausing ${Math.round(photoDelay / 1000)}s`);
+        await page.waitForTimeout(photoDelay);
+      }
+
       // Before scrolling
       await page.waitForTimeout(Math.floor(Math.random() * 1000) + 1000);
-      await randomScroll(page);
+      await humanScroll(page);
       // After scrolling, before extracting
       await page.waitForTimeout(Math.floor(Math.random() * 1000) + 1000);
       await randomMouseMove(page);
@@ -378,7 +408,7 @@ async function searchFacebook(
   await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
   // Human reads the page after it loads
   await page.waitForTimeout(Math.floor(Math.random() * 2000) + 2000);
-  await randomScroll(page);
+  await humanScroll(page);
   await randomMouseMove(page);
 
   if (page.url().includes("/login")) {
@@ -409,7 +439,7 @@ async function searchFacebook(
     await page.goto(retryUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
     // Human reads retry results
     await page.waitForTimeout(Math.floor(Math.random() * 2000) + 2000);
-    await randomScroll(page);
+    await humanScroll(page);
     await randomMouseMove(page);
     // Human scans retry results
     await page.waitForTimeout(Math.floor(Math.random() * 2000) + 2000);
