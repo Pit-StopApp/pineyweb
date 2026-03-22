@@ -52,9 +52,11 @@ export default function AdminClients() {
       if (!me || me.role !== "admin") { router.push("/dashboard"); return; }
       setAdminUserId(session.user.id);
       setAdminName(me.full_name || "Admin");
-      const { data } = await supabase.from("pineyweb_clients").select("*").order("created_at", { ascending: false });
+      const { data, error: clientsErr } = await supabase.from("pineyweb_clients").select("*").order("created_at", { ascending: false });
+      console.log("Clients fetch result:", data?.length, "rows, error:", clientsErr?.message || "none");
       setClients((data || []) as Client[]);
-      const { data: sc } = await supabase.from("pineyweb_scanner_clients").select("*").order("created_at", { ascending: true });
+      const { data: sc, error: scErr } = await supabase.from("pineyweb_scanner_clients").select("*").order("created_at", { ascending: true });
+      console.log("Scanner clients fetch result:", sc?.length, "rows, error:", scErr?.message || "none", "data:", sc);
       setScannerClients((sc || []) as ScannerClient[]);
       setLoading(false);
     };
