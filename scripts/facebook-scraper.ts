@@ -125,15 +125,23 @@ async function humanType(page: Page, selector: string, text: string) {
 }
 
 async function feedBreak(page: Page) {
-  console.log(`[${ts()}]   Taking a break — browsing Piney Web Co. page`);
   try {
-    await page.goto("https://www.facebook.com/pineyweb", { waitUntil: "domcontentloaded", timeout: 30000 });
-    await browsePageNaturally(page, "Piney Web Co.", Math.floor(Math.random() * 10000) + 15000); // 15-25s
+    const breakTime = Math.floor(Math.random() * 20000) + 15000;
+    console.log(`[${ts()}]   Taking a human break — browsing Piney Web Co. page...`);
+    await page.goto("https://www.facebook.com/profile.php?id=61578657544468", {
+      waitUntil: "domcontentloaded",
+      timeout: 15000,
+    });
+    await page.waitForTimeout(Math.floor(Math.random() * 3000) + 2000);
+    // Scroll naturally through own page
+    const scrolls = Math.floor(Math.random() * 3) + 2;
+    for (let i = 0; i < scrolls; i++) {
+      await page.mouse.wheel(0, Math.floor(Math.random() * 400) + 200);
+      await page.waitForTimeout(Math.floor(Math.random() * 2000) + 1500);
+    }
+    await page.waitForTimeout(breakTime);
   } catch {
-    // If page load fails, just pause instead
-    const pauseMs = Math.floor(Math.random() * 60000) + 120000; // 2-3 min
-    console.log(`[${ts()}]   Page load failed — pausing ${Math.round(pauseMs / 60000)}min instead`);
-    await page.waitForTimeout(pauseMs);
+    console.log(`[${ts()}]   Feed break skipped — page closed`);
   }
 }
 
