@@ -3,6 +3,9 @@ export async function findBusinessEmail(
   address: string,
   city: string
 ): Promise<{ email: string | null; source: string | null }> {
+  const isValidEmail = (v: unknown): v is string =>
+    typeof v === "string" && v.includes("@") && v.includes(".");
+
   // Try Apollo people search first — free tier, massive database
   try {
     const apolloResponse = await fetch("https://api.apollo.io/v1/mixed_people/search", {
@@ -24,7 +27,7 @@ export async function findBusinessEmail(
     const apolloData = await apolloResponse.json();
     const person = apolloData?.people?.[0];
 
-    if (person?.email) {
+    if (isValidEmail(person?.email)) {
       return { email: person.email, source: "Apollo" };
     }
 
@@ -63,7 +66,7 @@ export async function findBusinessEmail(
       const prospeoData = await prospeoResponse.json();
       const prospeoEmail = prospeoData?.response?.emails?.[0]?.email;
 
-      if (prospeoEmail) {
+      if (isValidEmail(prospeoEmail)) {
         return { email: prospeoEmail, source: "Prospeo" };
       }
     }

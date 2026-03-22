@@ -161,16 +161,17 @@ async function main() {
       const data = await res.json();
 
       if (res.status === 200 && data?.data) {
+        const isEmail = (v: unknown): v is string => typeof v === "string" && v.includes("@") && v.includes(".");
         const emails: string[] = [];
-        if (data.data.work_email) emails.push(data.data.work_email);
+        if (isEmail(data.data.work_email)) emails.push(data.data.work_email);
         if (Array.isArray(data.data.personal_emails)) {
           for (const e of data.data.personal_emails) {
-            if (typeof e === "string") emails.push(e);
+            if (isEmail(e)) emails.push(e);
           }
         }
-        if (data.data.recommended_personal_email) emails.push(data.data.recommended_personal_email);
+        if (isEmail(data.data.recommended_personal_email)) emails.push(data.data.recommended_personal_email);
 
-        const unique = Array.from(new Set(emails.filter(Boolean)));
+        const unique = Array.from(new Set(emails));
         if (unique.length > 0) {
           hits++;
           const foundEmail = unique[0];
