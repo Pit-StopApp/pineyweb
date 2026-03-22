@@ -28,7 +28,7 @@ function isRedirectedToPersonalProfile(url: string): boolean {
 
 // --- Clean email extraction ---
 function extractCleanEmail(text: string): string | null {
-  const emailMatches = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
+  const emailMatches = text.match(/(?<![a-zA-Z0-9._%+-])[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
   const email = emailMatches ? emailMatches.find(e =>
     !e.includes("@facebook.com") &&
     !e.includes("@fb.com") &&
