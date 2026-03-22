@@ -8,12 +8,26 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
 
-  let query = supabase.from("pineyweb_prospects").select("*").order("priority_tier", { ascending: true }).order("created_at", { ascending: false });
+  let query = supabase.from("pineyweb_prospects").select("*", { count: "exact" }).order("priority_tier", { ascending: true }).order("created_at", { ascending: false });
   if (status && status !== "all") query = query.eq("outreach_status", status);
 
-  const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ data: data || [] });
+  // Supabase JS defaults to LIMIT 1000 — fetch all rows in pages
+  const allData: Record<string, unknown>[] = [];
+  let from = 0;
+  const PAGE = 1000;
+  let totalCount = 0;
+
+  while (true) {
+    const { data: page, error, count } = await query.range(from, from + PAGE - 1);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (count !== null) totalCount = count;
+    if (!page || page.length === 0) break;
+    allData.push(...page);
+    if (page.length < PAGE) break;
+    from += PAGE;
+  }
+
+  return NextResponse.json({ data: allData, count: totalCount });
 }
 
 export async function POST(request: NextRequest) {

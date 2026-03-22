@@ -37,6 +37,7 @@ export default function ProspectsPage() {
   const [sending, setSending] = useState(false);
   const [sendProgress, setSendProgress] = useState("");
   const [showSendConfirm, setShowSendConfirm] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
     const init = async () => {
@@ -56,6 +57,7 @@ export default function ProspectsPage() {
     const res = await fetch(url);
     const data = await res.json();
     setProspects(data.data || []);
+    setTotalCount(data.count ?? (data.data || []).length);
     setPage(0);
   };
 
@@ -156,7 +158,7 @@ export default function ProspectsPage() {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
           <div>
             <span className="text-[11px] uppercase tracking-[0.15em] font-bold mb-2 block" style={{ color: "#805533" }}>Internal Tool</span>
-            <h1 className="text-5xl font-bold tracking-tight mb-2" style={{ color: "#1d1c17" }}>Prospects</h1>
+            <h1 className="text-5xl font-bold tracking-tight mb-2" style={{ color: "#1d1c17" }}>Prospects <span className="text-2xl font-normal" style={{ color: "#717971" }}>({totalCount.toLocaleString()})</span></h1>
             <p className="text-lg italic" style={{ color: "#414942" }}>Track outreach progress for every potential client in your pipeline.</p>
           </div>
           <div className="relative">
@@ -288,12 +290,25 @@ export default function ProspectsPage() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between px-6 py-4 border-t" style={{ borderColor: "rgba(193,201,191,0.2)" }}>
-              <span className="text-xs" style={{ color: "#717971" }}>Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
-              <div className="flex gap-1">
+              <span className="text-xs" style={{ color: "#717971" }}>Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length.toLocaleString()}</span>
+              <div className="flex gap-1 items-center">
                 <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="px-3 py-1 rounded text-xs font-bold disabled:opacity-30" style={{ color: "#316342" }}>Previous</button>
-                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => (
-                  <button key={i} onClick={() => setPage(i)} className="w-8 h-8 rounded text-xs font-bold" style={page === i ? { backgroundColor: "#316342", color: "#fff" } : { color: "#414942" }}>{i + 1}</button>
-                ))}
+                {(() => {
+                  const pages: (number | "...")[] = [];
+                  if (totalPages <= 7) {
+                    for (let i = 0; i < totalPages; i++) pages.push(i);
+                  } else {
+                    pages.push(0);
+                    if (page > 2) pages.push("...");
+                    for (let i = Math.max(1, page - 1); i <= Math.min(totalPages - 2, page + 1); i++) pages.push(i);
+                    if (page < totalPages - 3) pages.push("...");
+                    pages.push(totalPages - 1);
+                  }
+                  return pages.map((p, idx) =>
+                    p === "..." ? <span key={`e${idx}`} className="px-1 text-xs" style={{ color: "#717971" }}>...</span> :
+                    <button key={p} onClick={() => setPage(p as number)} className="w-8 h-8 rounded text-xs font-bold" style={page === p ? { backgroundColor: "#316342", color: "#fff" } : { color: "#414942" }}>{(p as number) + 1}</button>
+                  );
+                })()}
                 <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="px-3 py-1 rounded text-xs font-bold disabled:opacity-30" style={{ color: "#316342" }}>Next</button>
               </div>
             </div>
