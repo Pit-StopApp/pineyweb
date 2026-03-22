@@ -32,7 +32,7 @@ async function main() {
     if (!phone) continue;
 
     tested++;
-    const url = `https://api.peopledatalabs.com/v5/company/enrich?phone=${encodeURIComponent(phone)}&api_key=${PDL_API_KEY}`;
+    const url = `https://api.peopledatalabs.com/v5/person/enrich?phone=${encodeURIComponent(phone)}&api_key=${PDL_API_KEY}`;
 
     try {
       const res = await fetch(url);
