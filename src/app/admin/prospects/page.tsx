@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
@@ -26,6 +26,14 @@ const PAGE_SIZES = [10, 25, 50, 100];
 
 
 export default function ProspectsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#fef9f1" }}><p style={{ color: "#414942" }}>Loading...</p></div>}>
+      <ProspectsPageInner />
+    </Suspense>
+  );
+}
+
+function ProspectsPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [clientSlug, setClientSlug] = useState(searchParams.get("client") || "piney-web");
