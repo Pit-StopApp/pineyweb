@@ -308,9 +308,15 @@ async function loadOrCreateSession(context: BrowserContext, page: Page): Promise
 const IGNORED_DOMAINS = ["facebook.com", "fb.com", "instagram.com", "messenger.com", "whatsapp.com", "twitter.com", "x.com", "tiktok.com", "youtube.com", "google.com", "apple.com", "play.google.com"];
 
 function extractWebsiteUrl(text: string): string | null {
-  const urlMatches = text.match(/https?:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}[^\s)"]*/g);
-  if (!urlMatches) return null;
-  for (const u of urlMatches) {
+  // Match full URLs (http/https)
+  const urlMatches = text.match(/https?:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}[^\s)"]*/g) || [];
+
+  // Also match bare domain patterns for common website builders and link services
+  const bareDomainPatterns = /\b([a-zA-Z0-9-]+\.(business\.site|linktr\.ee|squarespace\.com|wix\.com|weebly\.com|godaddysites\.com|wordpress\.com|carrd\.co|bio\.link|beacons\.ai|taplink\.cc))\b/gi;
+  const bareMatches = text.match(bareDomainPatterns) || [];
+
+  const allMatches = [...urlMatches, ...bareMatches.map(m => m.startsWith("http") ? m : `https://${m}`)];
+  for (const u of allMatches) {
     const domain = u.replace(/^https?:\/\//, "").split("/")[0].toLowerCase();
     if (IGNORED_DOMAINS.some(d => domain.includes(d))) continue;
     return u;
@@ -438,38 +444,70 @@ async function checkBusinessInactive(page: Page): Promise<{ inactive: boolean; r
       return { inactive: true, reason: "Permanently closed per Facebook" };
     }
 
-    // Look for post dates — Facebook renders dates in various formats
-    // Common patterns: "January 15, 2024", "Jan 15", "March 2023", timestamps like "1h", "2d", "3w"
-    const recentIndicators = /\b(\d+[hm]\b|\d+\s*min|just now|yesterday|\d+d\b|\d+w\b)/i;
+    // Look for post dates — Facebook renders dates in many formats
+    // Recent relative timestamps mean the business is active
+    const recentIndicators = /\b(\d+[hm]\b|\d+\s*min(ute)?s?\b|just now|yesterday|\d+d\b|\d+w\b|\d+\s*hr)/i;
     if (recentIndicators.test(bodyText)) {
-      // Recent activity found — not inactive
       return { inactive: false, reason: null };
     }
 
-    // Try to find absolute dates in post timestamps
-    const datePattern = /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b/gi;
-    const dateMatches = bodyText.match(datePattern);
+    // Relative year indicators — "1y", "2y" etc. mean old posts
+    const yearRelative = bodyText.match(/\b(\d+)y\b/);
+    if (yearRelative) {
+      const years = parseInt(yearRelative[1]);
+      if (years >= 2) {
+        console.log(`[${ts()}]   Business appears inactive — most recent post ~${years} years ago`);
+        return { inactive: true, reason: `Inactive — last Facebook post: ~${years} years ago` };
+      }
+      return { inactive: false, reason: null };
+    }
 
-    if (dateMatches && dateMatches.length > 0) {
-      // Parse all found dates and find the most recent one
-      let mostRecent: Date | null = null;
-      for (const dateStr of dateMatches) {
-        const parsed = new Date(dateStr);
-        if (!isNaN(parsed.getTime()) && (!mostRecent || parsed > mostRecent)) {
-          mostRecent = parsed;
+    // Parse absolute dates aggressively
+    const MONTH_MAP: Record<string, number> = {
+      january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+      july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
+      jan: 0, feb: 1, mar: 2, apr: 3, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+    };
+
+    // Match: "January 15, 2024", "Aug 29, 2019", "March 2023", "December 1 2020"
+    const datePatterns = [
+      /\b(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s+\d{4}\b/gi,
+      /\b(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\b/gi,
+      /\b\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\b/gi,
+    ];
+
+    let mostRecent: Date | null = null;
+    for (const pattern of datePatterns) {
+      const matches = bodyText.match(pattern);
+      if (matches) {
+        for (const dateStr of matches) {
+          // Try native Date parse first
+          let parsed = new Date(dateStr);
+          // If that fails, manually parse "Month Year" format
+          if (isNaN(parsed.getTime())) {
+            const parts = dateStr.trim().split(/[\s,]+/);
+            const monthStr = parts.find(p => MONTH_MAP[p.toLowerCase()] !== undefined);
+            const yearStr = parts.find(p => /^\d{4}$/.test(p));
+            if (monthStr && yearStr) {
+              parsed = new Date(parseInt(yearStr), MONTH_MAP[monthStr.toLowerCase()], 15);
+            }
+          }
+          if (!isNaN(parsed.getTime()) && (!mostRecent || parsed > mostRecent)) {
+            mostRecent = parsed;
+          }
         }
       }
+    }
 
-      if (mostRecent) {
-        const cutoff = new Date();
-        cutoff.setMonth(cutoff.getMonth() - INACTIVE_MONTHS);
-        if (mostRecent < cutoff) {
-          const dateLabel = mostRecent.toLocaleDateString("en-US", { year: "numeric", month: "long" });
-          console.log(`[${ts()}]   Business appears inactive — last post: ${dateLabel}`);
-          return { inactive: true, reason: `Inactive — last Facebook post: ${dateLabel}` };
-        }
-        return { inactive: false, reason: null };
+    if (mostRecent) {
+      const cutoff = new Date();
+      cutoff.setMonth(cutoff.getMonth() - INACTIVE_MONTHS);
+      if (mostRecent < cutoff) {
+        const dateLabel = mostRecent.toLocaleDateString("en-US", { year: "numeric", month: "long" });
+        console.log(`[${ts()}]   Business appears inactive — last post: ${dateLabel}`);
+        return { inactive: true, reason: `Inactive — last Facebook post: ${dateLabel}` };
       }
+      return { inactive: false, reason: null };
     }
 
     // No posts found at all — treat as inactive
