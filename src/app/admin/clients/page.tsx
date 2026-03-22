@@ -273,7 +273,7 @@ export default function AdminClients() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               {scannerClients.map(sc => {
-                const client = clients.find(c => c.id === sc.client_id);
+                const _client = clients.find(c => c.id === sc.client_id);
                 return (
                   <div key={sc.id} className="rounded-xl border p-6 transition-colors hover:bg-[#f2ede5]" style={{ backgroundColor: "#f8f3eb", borderColor: "rgba(193,201,191,0.2)" }}>
                     <div className="flex items-center gap-3 mb-4">
