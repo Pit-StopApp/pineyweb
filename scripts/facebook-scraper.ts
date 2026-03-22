@@ -74,7 +74,9 @@ async function loadOrCreateSession(context: BrowserContext): Promise<void> {
 async function extractEmailFromAbout(page: Page): Promise<string | null> {
   try {
     const currentUrl = page.url().replace(/\/$/, "");
-    const aboutUrl = currentUrl + "/directory_contact_info";
+    const aboutUrl = currentUrl.includes("profile.php?id=")
+      ? currentUrl + "&sk=about_contact_and_basic_info"
+      : currentUrl + "/directory_contact_info";
     console.log(`[${ts()}]   Navigating to contact info: ${aboutUrl}`);
     await page.goto(aboutUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
     await page.waitForTimeout(3000);
