@@ -46,13 +46,14 @@ export async function POST(request: NextRequest) {
       .from("pineyweb_prospects")
       .select("email")
       .not("emailed_at", "is", null);
-    const emailedAddresses = new Set(alreadyEmailed?.map(p => p.email) ?? []);
+    const emailedAddresses = new Set(alreadyEmailed?.map(p => p.email?.toLowerCase()).filter(Boolean) ?? []);
 
     // Also deduplicate within the batch itself (keep first occurrence)
     const seenInBatch = new Set<string>();
     const uniqueProspects = prospects.filter(p => {
-      if (!p.email || emailedAddresses.has(p.email) || seenInBatch.has(p.email)) return false;
-      seenInBatch.add(p.email);
+      const lower = p.email?.toLowerCase();
+      if (!lower || emailedAddresses.has(lower) || seenInBatch.has(lower)) return false;
+      seenInBatch.add(lower);
       return true;
     });
 
@@ -99,7 +100,7 @@ export async function POST(request: NextRequest) {
           await supabase
             .from("pineyweb_prospects")
             .update({ emailed_at: new Date().toISOString() })
-            .eq("email", prospect.email);
+            .filter("email", "ilike", prospect.email);
           sent++;
         }
       } catch (err) {
