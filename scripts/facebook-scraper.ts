@@ -315,6 +315,68 @@ async function confirmPhoneMatch(page: Page, phone: string | null): Promise<bool
   }
 }
 
+// --- Dead business detection ---
+const INACTIVE_MONTHS = 24;
+
+async function checkBusinessInactive(page: Page): Promise<{ inactive: boolean; reason: string | null }> {
+  try {
+    const bodyText = await page.textContent("body") || "";
+
+    // Check for "Permanently Closed"
+    if (/permanently\s+closed/i.test(bodyText)) {
+      console.log(`[${ts()}]   Business appears inactive — Permanently Closed`);
+      return { inactive: true, reason: "Permanently closed per Facebook" };
+    }
+
+    // Look for post dates — Facebook renders dates in various formats
+    // Common patterns: "January 15, 2024", "Jan 15", "March 2023", timestamps like "1h", "2d", "3w"
+    const recentIndicators = /\b(\d+[hm]\b|\d+\s*min|just now|yesterday|\d+d\b|\d+w\b)/i;
+    if (recentIndicators.test(bodyText)) {
+      // Recent activity found — not inactive
+      return { inactive: false, reason: null };
+    }
+
+    // Try to find absolute dates in post timestamps
+    const datePattern = /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b/gi;
+    const dateMatches = bodyText.match(datePattern);
+
+    if (dateMatches && dateMatches.length > 0) {
+      // Parse all found dates and find the most recent one
+      let mostRecent: Date | null = null;
+      for (const dateStr of dateMatches) {
+        const parsed = new Date(dateStr);
+        if (!isNaN(parsed.getTime()) && (!mostRecent || parsed > mostRecent)) {
+          mostRecent = parsed;
+        }
+      }
+
+      if (mostRecent) {
+        const cutoff = new Date();
+        cutoff.setMonth(cutoff.getMonth() - INACTIVE_MONTHS);
+        if (mostRecent < cutoff) {
+          const dateLabel = mostRecent.toLocaleDateString("en-US", { year: "numeric", month: "long" });
+          console.log(`[${ts()}]   Business appears inactive — last post: ${dateLabel}`);
+          return { inactive: true, reason: `Inactive — last Facebook post: ${dateLabel}` };
+        }
+        return { inactive: false, reason: null };
+      }
+    }
+
+    // No posts found at all — treat as inactive
+    // Check if we're actually on a page with content (not an error page)
+    const hasPageContent = await page.locator('[role="main"]').count() > 0;
+    if (hasPageContent) {
+      console.log(`[${ts()}]   Business appears inactive — no posts found`);
+      return { inactive: true, reason: "Inactive — no Facebook posts found" };
+    }
+
+    return { inactive: false, reason: null };
+  } catch (err) {
+    console.log(`[${ts()}]   Error checking activity: ${err instanceof Error ? err.message : err}`);
+    return { inactive: false, reason: null };
+  }
+}
+
 // --- Collect candidates from current search results page ---
 async function collectCandidates(page: Page): Promise<{ text: string; href: string }[]> {
   const allLinks = await page.locator("a[href]").all();
@@ -334,13 +396,15 @@ async function collectCandidates(page: Page): Promise<{ text: string; href: stri
 }
 
 // --- Try to match and extract from candidates ---
+type SearchResult = { url: string | null; email: string | null; website: string | null; inactive: boolean; inactiveReason: string | null };
+
 async function tryMatchCandidates(
   page: Page,
   candidates: { text: string; href: string }[],
   matchName: string,
   city: string,
   phone: string | null
-): Promise<{ url: string | null; email: string | null; website: string | null }> {
+): Promise<SearchResult> {
   // Log top candidates for debugging
   for (const { text } of candidates.slice(0, 5)) {
     const isMatch = fuzzyMatch(text, matchName, city);
@@ -374,7 +438,7 @@ async function tryMatchCandidates(
 
       if (isRedirectedToPersonalProfile(page.url())) {
         console.log(`[${ts()}]   Redirected to personal profile — skipping`);
-        return { url: null, email: null, website: null };
+        return { url: null, email: null, website: null, inactive: false, inactiveReason: null };
       }
 
       const phoneOk = await confirmPhoneMatch(page, phone);
@@ -384,12 +448,18 @@ async function tryMatchCandidates(
         console.log(`[${ts()}]   Phone mismatch but name/city match, proceeding`);
       }
 
+      // Check if business is inactive before extracting email
+      const { inactive, reason: inactiveReason } = await checkBusinessInactive(page);
+      if (inactive) {
+        return { url: page.url(), email: null, website: null, inactive: true, inactiveReason };
+      }
+
       const { email, website } = await extractEmailFromPage(page);
-      return { url: page.url(), email, website };
+      return { url: page.url(), email, website, inactive: false, inactiveReason: null };
     }
   }
 
-  return { url: null, email: null, website: null };
+  return { url: null, email: null, website: null, inactive: false, inactiveReason: null };
 }
 
 // --- Main search function ---
@@ -398,7 +468,7 @@ async function searchFacebook(
   businessName: string,
   city: string,
   phone: string | null
-): Promise<{ url: string | null; email: string | null; website: string | null }> {
+): Promise<SearchResult> {
   const humanQuery = humanizeQuery(businessName, city);
   const searchUrl = `https://www.facebook.com/search/pages/?q=${encodeURIComponent(humanQuery)}`;
 
@@ -413,7 +483,7 @@ async function searchFacebook(
 
   if (page.url().includes("/login")) {
     console.log(`[${ts()}]   Session expired — redirected to login`);
-    return { url: null, email: null, website: null };
+    return { url: null, email: null, website: null, inactive: false, inactiveReason: null };
   }
 
   // Human scans search results
@@ -453,7 +523,7 @@ async function searchFacebook(
   }
 
   console.log(`[${ts()}]   No matching Facebook page found`);
-  return { url: null, email: null, website: null };
+  return { url: null, email: null, website: null, inactive: false, inactiveReason: null };
 }
 
 // --- Outreach ---
@@ -570,7 +640,22 @@ async function main() {
     console.log(`\n[${ts()}] [${i + 1}/${prospects.length}] ${p.business_name} (${p.city}) — T${p.priority_tier}, ${p.rating}★, ${p.review_count} reviews`);
 
     try {
-      const { url, email, website } = await searchFacebook(page, p.business_name, p.city, p.phone);
+      const { url, email, website, inactive, inactiveReason } = await searchFacebook(page, p.business_name, p.city, p.phone);
+
+      // Dead business detection — skip outreach entirely
+      if (inactive && url) {
+        console.log(`[${ts()}]   Business appears inactive — skipping outreach`);
+        await supabase
+          .from("pineyweb_prospects")
+          .update({
+            notes: inactiveReason,
+            outreach_status: "lost",
+            facebook_url: url,
+          })
+          .eq("place_id", p.place_id);
+        console.log(`[${ts()}]   Marked: ${inactiveReason}`);
+        continue;
+      }
 
       // If a website is found (not facebook/instagram), skip outreach
       if (website) {
