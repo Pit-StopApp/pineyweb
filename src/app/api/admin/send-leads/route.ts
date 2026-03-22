@@ -1,24 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
-import { getScannerLeadsEmail } from "@/lib/emails/scanner-leads-delivery";
+import { buildScannerLeadsEmail } from "@/lib/emails/scanner-leads-delivery";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST(req: NextRequest) {
   try {
-    const { to, clientName, city, totalLeads, tier1Leads, tier2Leads, templatesUrl, xlsxBase64, fileName } = await req.json();
+    const { to, clientName, city, totalLeads, tier1Leads, tier2Leads, xlsxBase64, fileName } = await req.json();
 
     if (!to || !city || !xlsxBase64) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const html = getScannerLeadsEmail({
+    const html = buildScannerLeadsEmail({
       clientName: clientName || "there",
       city,
       totalLeads: totalLeads || 0,
       tier1Leads: tier1Leads || 0,
       tier2Leads: tier2Leads || 0,
-      templatesUrl: templatesUrl || "https://pineyweb.com",
     });
 
     const date = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });

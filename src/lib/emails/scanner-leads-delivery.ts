@@ -1,12 +1,4 @@
-export function getScannerLeadsEmail(vars: {
-  clientName: string;
-  city: string;
-  totalLeads: number;
-  tier1Leads: number;
-  tier2Leads: number;
-  templatesUrl: string;
-}): string {
-  return `<!DOCTYPE html>
+export const SCANNER_LEADS_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -23,7 +15,7 @@ export function getScannerLeadsEmail(vars: {
           <tr>
             <td style="background-color:#316342;padding:32px 40px;text-align:center;">
               <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:700;letter-spacing:-0.5px;">Your Leads Are Ready</h1>
-              <p style="margin:8px 0 0;color:rgba(255,255,255,0.8);font-size:15px;font-style:italic;">${vars.city} — ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</p>
+              <p style="margin:8px 0 0;color:rgba(255,255,255,0.8);font-size:15px;font-style:italic;">{{city}} — {{date}}</p>
             </td>
           </tr>
 
@@ -31,10 +23,10 @@ export function getScannerLeadsEmail(vars: {
           <tr>
             <td style="padding:40px;">
               <p style="margin:0 0 20px;color:#1d1c17;font-size:16px;line-height:1.7;">
-                Hi ${vars.clientName},
+                Hi {{clientName}},
               </p>
               <p style="margin:0 0 24px;color:#414942;font-size:16px;line-height:1.7;">
-                Your latest scan just finished. I've attached a spreadsheet with all the leads from <strong>${vars.city}</strong> — ready for you to review and start reaching out.
+                Your latest scan just finished. I've attached a spreadsheet with all the leads from <strong>{{city}}</strong> — ready for you to review and start reaching out.
               </p>
 
               <!-- Stats Cards -->
@@ -43,19 +35,19 @@ export function getScannerLeadsEmail(vars: {
                   <td width="33%" style="padding:4px;">
                     <div style="background-color:#f8f3eb;border-radius:8px;padding:16px;text-align:center;">
                       <p style="margin:0;color:#717971;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;">Total Leads</p>
-                      <p style="margin:4px 0 0;color:#316342;font-size:28px;font-weight:700;">${vars.totalLeads}</p>
+                      <p style="margin:4px 0 0;color:#316342;font-size:28px;font-weight:700;">{{totalLeads}}</p>
                     </div>
                   </td>
                   <td width="33%" style="padding:4px;">
                     <div style="background-color:#f8f3eb;border-radius:8px;padding:16px;text-align:center;">
                       <p style="margin:0;color:#717971;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;">High Priority</p>
-                      <p style="margin:4px 0 0;color:#805533;font-size:28px;font-weight:700;">${vars.tier1Leads}</p>
+                      <p style="margin:4px 0 0;color:#805533;font-size:28px;font-weight:700;">{{tier1Leads}}</p>
                     </div>
                   </td>
                   <td width="33%" style="padding:4px;">
                     <div style="background-color:#f8f3eb;border-radius:8px;padding:16px;text-align:center;">
                       <p style="margin:0;color:#717971;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;">Standard</p>
-                      <p style="margin:4px 0 0;color:#414942;font-size:28px;font-weight:700;">${vars.tier2Leads}</p>
+                      <p style="margin:4px 0 0;color:#414942;font-size:28px;font-weight:700;">{{tier2Leads}}</p>
                     </div>
                   </td>
                 </tr>
@@ -71,14 +63,14 @@ export function getScannerLeadsEmail(vars: {
                   <td style="background-color:#f8f3eb;border-radius:8px;padding:20px 24px;border-left:4px solid #805533;">
                     <p style="margin:0 0 8px;color:#1d1c17;font-size:15px;font-weight:700;">Need help with what to say?</p>
                     <p style="margin:0;color:#414942;font-size:14px;line-height:1.6;">
-                      I put together outreach templates you can copy/paste. <a href="${vars.templatesUrl}" style="color:#316342;font-weight:700;">View Templates &rarr;</a>
+                      I put together outreach templates you can copy/paste. <a href="https://pineyweb.com" style="color:#316342;font-weight:700;">View Templates &rarr;</a>
                     </p>
                   </td>
                 </tr>
               </table>
 
               <!-- Sign-off -->
-              <p style="margin:0 0 4px;color:#1d1c17;font-size:16px;line-height:1.7;">— Dustin Hartman</p>
+              <p style="margin:0 0 4px;color:#1d1c17;font-size:16px;line-height:1.7;">&mdash; Dustin Hartman</p>
               <p style="margin:0;color:#414942;font-size:16px;line-height:1.7;">Piney Web Co.</p>
             </td>
           </tr>
@@ -98,4 +90,20 @@ export function getScannerLeadsEmail(vars: {
   </table>
 </body>
 </html>`;
+
+export function buildScannerLeadsEmail(vars: {
+  clientName: string;
+  city: string;
+  totalLeads: number;
+  tier1Leads: number;
+  tier2Leads: number;
+}): string {
+  const date = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  return SCANNER_LEADS_HTML
+    .replace(/\{\{clientName\}\}/g, vars.clientName)
+    .replace(/\{\{city\}\}/g, vars.city)
+    .replace(/\{\{date\}\}/g, date)
+    .replace(/\{\{totalLeads\}\}/g, String(vars.totalLeads))
+    .replace(/\{\{tier1Leads\}\}/g, String(vars.tier1Leads))
+    .replace(/\{\{tier2Leads\}\}/g, String(vars.tier2Leads));
 }
