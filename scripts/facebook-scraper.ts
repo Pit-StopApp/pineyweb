@@ -76,7 +76,7 @@ async function extractEmailFromAbout(page: Page): Promise<string | null> {
     const currentUrl = page.url().replace(/\/$/, "");
     const aboutUrl = currentUrl + "/about";
     console.log(`[${ts()}]   Navigating to About: ${aboutUrl}`);
-    await page.goto(aboutUrl, { waitUntil: "networkidle", timeout: 15000 });
+    await page.goto(aboutUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
     await page.waitForTimeout(3000);
 
     const bodyText = await page.textContent("body") || "";
@@ -132,8 +132,8 @@ async function searchFacebook(
   const searchUrl = `https://www.facebook.com/search/pages/?q=${query}`;
 
   console.log(`[${ts()}]   Searching Facebook: "${businessName} ${city} TX"`);
-  await page.goto(searchUrl, { waitUntil: "networkidle", timeout: 30000 });
-  await page.waitForTimeout(4000);
+  await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForTimeout(5000);
 
   if (page.url().includes("/login")) {
     console.log(`[${ts()}]   Session expired — redirected to login`);
@@ -160,7 +160,7 @@ async function searchFacebook(
     if (fuzzyMatch(text, businessName)) {
       console.log(`[${ts()}]   Matched: "${text}"`);
 
-      await page.goto(href, { waitUntil: "networkidle", timeout: 15000 });
+      await page.goto(href, { waitUntil: "domcontentloaded", timeout: 15000 });
       await page.waitForTimeout(2000);
 
       const phoneOk = await confirmPhoneMatch(page, phone);
