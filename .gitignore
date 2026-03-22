@@ -9,6 +9,9 @@
 # testing
 /coverage
 
+# Facebook session cookies
+scripts/fb-session.json
+
 # next.js
 /.next/
 /out/
