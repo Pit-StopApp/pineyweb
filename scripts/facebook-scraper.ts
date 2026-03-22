@@ -163,11 +163,11 @@ async function searchFacebook(
       await page.waitForTimeout(2000);
 
       const phoneOk = await confirmPhoneMatch(page, phone);
-      if (!phoneOk) {
-        console.log(`[${ts()}]   Phone mismatch — wrong page, skipping`);
-        continue;
+      if (phoneOk) {
+        console.log(`[${ts()}]   Phone confirmed`);
+      } else {
+        console.log(`[${ts()}]   Phone mismatch but name/city match, proceeding`);
       }
-      console.log(`[${ts()}]   Phone confirmed (or no phone to check)`);
 
       const email = await extractEmailFromAbout(page);
       return { url: page.url(), email };
