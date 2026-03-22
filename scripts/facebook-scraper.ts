@@ -254,6 +254,8 @@ async function main() {
     .is("email", null)
     .not("phone", "is", null)
     .gte("review_count", 5)
+    .not("notes", "ilike", "%No Facebook presence%")
+    .not("notes", "ilike", "%Facebook found, no email listed%")
     .order("priority_tier", { ascending: true })
     .order("rating", { ascending: false })
     .limit(5);
@@ -310,16 +312,26 @@ async function main() {
         }
       } else if (url) {
         console.log(`[${ts()}]   ✗ Page found but no email: ${url}`);
+        await supabase
+          .from("pineyweb_prospects")
+          .update({ notes: "Facebook found, no email listed", contact_method: "facebook_message" })
+          .eq("place_id", p.place_id);
+        console.log(`[${ts()}]   Marked: Facebook found, no email listed`);
       } else {
         console.log(`[${ts()}]   ✗ No Facebook page found`);
+        await supabase
+          .from("pineyweb_prospects")
+          .update({ notes: "No Facebook presence", contact_method: "phone" })
+          .eq("place_id", p.place_id);
+        console.log(`[${ts()}]   Marked: No Facebook presence`);
       }
     } catch (err) {
       console.log(`[${ts()}]   ✗ Error: ${err instanceof Error ? err.message : err}`);
     }
 
-    // Random delay 2-4 minutes between searches
+    // Random delay 45-90 seconds between searches
     if (i < prospects.length - 1) {
-      await randomDelay(120000, 240000);
+      await randomDelay(45000, 90000);
     }
   }
 
