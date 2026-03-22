@@ -619,8 +619,32 @@ async function main() {
   // Human settling in after opening browser
   await page.waitForTimeout(Math.floor(Math.random() * 4000) + 3000);
 
-  let hits = 0;
-  let emailsSent = 0;
+  let tested = 0;
+  let emailsFound = 0;
+  let outreachSent = 0;
+  let skipped = 0; // inactive + has website
+  let noFacebook = 0;
+  let noEmail = 0;
+  const total = prospects.length;
+
+  function logProgress() {
+    const hitRate = tested > 0 ? ((emailsFound / tested) * 100).toFixed(1) : "0.0";
+    console.log(`\n[Progress] ${tested}/${total} | Emails found: ${emailsFound} | Sent: ${outreachSent} | Skipped: ${skipped} | No Facebook: ${noFacebook} | No email: ${noEmail} | Hit rate: ${hitRate}%`);
+  }
+
+  process.on("SIGINT", () => {
+    console.log("\n[Interrupted]");
+    console.log("=== Session Summary ===");
+    console.log(`Tested: ${tested}`);
+    console.log(`Emails found: ${emailsFound}`);
+    console.log(`Outreach sent: ${outreachSent}`);
+    console.log(`Skipped: ${skipped}`);
+    console.log(`No Facebook: ${noFacebook}`);
+    console.log(`No email: ${noEmail}`);
+    console.log(`Hit rate: ${tested > 0 ? ((emailsFound / tested) * 100).toFixed(1) : "0.0"}%`);
+    process.exit(0);
+  });
+
   const feedBreakInterval = Math.floor(Math.random() * 5) + 8; // every 8-12 prospects
   const extendedBreakInterval = Math.floor(Math.random() * 6) + 15; // every 15-20 prospects
 
@@ -654,6 +678,9 @@ async function main() {
           })
           .eq("place_id", p.place_id);
         console.log(`[${ts()}]   Marked: ${inactiveReason}`);
+        skipped++;
+        tested++;
+        if (tested % 10 === 0) logProgress();
         continue;
       }
 
@@ -668,11 +695,14 @@ async function main() {
             facebook_url: url || undefined,
           })
           .eq("place_id", p.place_id);
+        skipped++;
+        tested++;
+        if (tested % 10 === 0) logProgress();
         continue;
       }
 
       if (email) {
-        hits++;
+        emailsFound++;
         console.log(`[${ts()}]   ✓ EMAIL FOUND: ${email}`);
         console.log(`[${ts()}]   Facebook page: ${url}`);
 
@@ -689,9 +719,10 @@ async function main() {
         } else {
           console.log(`[${ts()}]   Saved to database`);
           const sent = await sendOutreach({ ...p, email });
-          if (sent) emailsSent++;
+          if (sent) outreachSent++;
         }
       } else if (url) {
+        noEmail++;
         console.log(`[${ts()}]   ✗ Page found but no email: ${url}`);
         await supabase
           .from("pineyweb_prospects")
@@ -699,6 +730,7 @@ async function main() {
           .eq("place_id", p.place_id);
         console.log(`[${ts()}]   Marked: Facebook found, no email listed`);
       } else {
+        noFacebook++;
         console.log(`[${ts()}]   ✗ No Facebook page found`);
         await supabase
           .from("pineyweb_prospects")
@@ -706,8 +738,13 @@ async function main() {
           .eq("place_id", p.place_id);
         console.log(`[${ts()}]   Marked: No Facebook presence`);
       }
+
+      tested++;
+      if (tested % 10 === 0) logProgress();
     } catch (err) {
       console.log(`[${ts()}]   ✗ Error: ${err instanceof Error ? err.message : err}`);
+      tested++;
+      if (tested % 10 === 0) logProgress();
     }
 
     // Random delay 31-57 seconds between searches
@@ -723,10 +760,13 @@ async function main() {
   await browser.close();
 
   console.log(`\n=== Results ===`);
-  console.log(`Tested: ${prospects.length}`);
-  console.log(`Emails found: ${hits}`);
-  console.log(`Outreach sent: ${emailsSent}`);
-  console.log(`Hit rate: ${prospects.length > 0 ? ((hits / prospects.length) * 100).toFixed(1) : 0}%`);
+  console.log(`Tested: ${tested}`);
+  console.log(`Emails found: ${emailsFound}`);
+  console.log(`Outreach sent: ${outreachSent}`);
+  console.log(`Skipped: ${skipped}`);
+  console.log(`No Facebook: ${noFacebook}`);
+  console.log(`No email: ${noEmail}`);
+  console.log(`Hit rate: ${tested > 0 ? ((emailsFound / tested) * 100).toFixed(1) : "0.0"}%`);
 }
 
 main();
