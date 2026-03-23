@@ -3,7 +3,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import Link from "next/link";
 import AdminNav from "@/components/AdminNav";
 
 interface QueueItem { id: string; city: string; distance_from_longview_miles: number; status: string; prospects_found: number; emails_found: number; emails_sent: number; last_scanned_at: string | null; population: number | null; }
