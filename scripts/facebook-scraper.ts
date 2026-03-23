@@ -471,16 +471,28 @@ function fuzzyClean(s: string, city?: string): string {
   return c;
 }
 
+// Words too common to be sole basis for a match
+const SOLE_MATCH_BLACKLIST = new Set(["smith","auto","hair","fitness","electric","repair","center","care","family","texas","tx","services","solutions","chris","first","new","custom","pro","american","national","quality","home","west","east","north","south"]);
+
 function fuzzyMatch(pageName: string, businessName: string, city?: string): boolean {
   const a = fuzzyClean(pageName, city), b = fuzzyClean(businessName, city);
   const aWords = a.split(" ").filter(w => w.length > 1), bWords = b.split(" ").filter(w => w.length > 1);
   const aUniq = new Set(aWords.filter(w => !GENERIC_WORDS.has(w)));
   const bUniq = bWords.filter(w => !GENERIC_WORDS.has(w));
-  if (!bUniq.some(w => aUniq.has(w))) return false;
+  const overlap = bUniq.filter(w => aUniq.has(w));
+  if (overlap.length === 0) return false;
+
+  // Require at least 2 matching significant words, OR 1 highly unique word
+  if (overlap.length === 1) {
+    const soleWord = overlap[0];
+    if (SOLE_MATCH_BLACKLIST.has(soleWord) || soleWord.length <= 3) return false;
+  }
+
+  // Substring containment check
   const aC = aWords.filter(w => !GENERIC_WORDS.has(w)).join(" "), bC = bUniq.join(" ");
   if (aC.includes(bC) || bC.includes(aC) || aC === bC) return true;
   if (bUniq.length === 0) return false;
-  return bUniq.filter(w => aUniq.has(w)).length / bUniq.length >= 0.5;
+  return overlap.length / bUniq.length >= 0.5;
 }
 
 function humanizeQuery(name: string, city: string): string {
@@ -500,6 +512,27 @@ async function confirmPhoneMatch(page: Page, phone: string | null): Promise<bool
     const target = phoneDigits(phone);
     return target.length < 10 || body.replace(/[^\d]/g, "").includes(target);
   } catch { return true; }
+}
+
+async function scrapeCityFromPage(page: Page): Promise<string | null> {
+  try {
+    const city = await page.evaluate(() => {
+      const body = document.body?.innerText || "";
+      // Look for common Facebook location patterns
+      const patterns = [
+        /(?:Located in|located in)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/,
+        /(?:City|Location)[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),?\s*(?:TX|Texas)/i,
+        /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),\s*(?:TX|Texas)\s*\d{5}/,
+        /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),\s*TX\b/,
+      ];
+      for (const pat of patterns) {
+        const m = body.match(pat);
+        if (m?.[1]) return m[1].trim();
+      }
+      return null;
+    });
+    return city;
+  } catch { return null; }
 }
 
 const INACTIVE_MONTHS = 24;
@@ -580,11 +613,14 @@ async function gazeAtBox(page: Page, box: { x: number; y: number; width: number;
 // ============================================================================
 
 async function extractEmailFromPage(page: Page): Promise<{ email: string | null; website: string | null }> {
-  // 10 second hard timeout for entire extraction
-  const extractionTimer = new Promise<{ email: null; website: null }>((resolve) =>
-    setTimeout(() => { console.log(`[${ts()}]   Email extraction timeout (10s)`); resolve({ email: null, website: null }); }, 10000)
-  );
-  return Promise.race([extractEmailInner(page), extractionTimer]);
+  // 10 second hard timeout — scoped with cleanup to prevent leaking
+  let timerId: ReturnType<typeof setTimeout> | null = null;
+  const extractionTimer = new Promise<{ email: null; website: null }>((resolve) => {
+    timerId = setTimeout(() => { console.log(`[${ts()}]   Email extraction timeout (10s)`); resolve({ email: null, website: null }); }, 10000);
+  });
+  const result = await Promise.race([extractEmailInner(page), extractionTimer]);
+  if (timerId) clearTimeout(timerId); // Cancel timer if extraction finished first
+  return result;
 }
 
 async function extractEmailInner(page: Page): Promise<{ email: string | null; website: string | null }> {
@@ -791,7 +827,21 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
       await humanDelay(page, 1000, 2500);
 
       const phoneOk = await confirmPhoneMatch(page, phone);
-      console.log(`[${ts()}]   ${phoneOk ? "Phone confirmed" : "Phone mismatch but name/city match, proceeding"}`);
+      const scrapedCity = await scrapeCityFromPage(page);
+      const cityConfirmed = scrapedCity ? scrapedCity.toLowerCase().includes(city.toLowerCase()) || city.toLowerCase().includes(scrapedCity.toLowerCase()) : false;
+
+      if (scrapedCity && !cityConfirmed) {
+        console.log(`[${ts()}]   City mismatch — page shows ${scrapedCity}, prospect is ${city} — skipping`);
+        return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
+      }
+
+      if (!phoneOk && !cityConfirmed) {
+        console.log(`[${ts()}]   Phone mismatch + city unverified — skipping`);
+        return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
+      }
+
+      if (phoneOk) console.log(`[${ts()}]   Phone confirmed${cityConfirmed ? ", city confirmed" : ""}`);
+      else console.log(`[${ts()}]   Phone mismatch but city confirmed (${scrapedCity}) — proceeding with caution`);
 
       const cleanedPage = fuzzyClean(text, city), cleanedBiz = fuzzyClean(matchName, city);
       const matchType: "exact" | "fuzzy" = cleanedPage === cleanedBiz ? "exact" : "fuzzy";
