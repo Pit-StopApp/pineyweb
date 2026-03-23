@@ -73,15 +73,27 @@ function findWebsite(text: string): string | null {
   // Strip phone numbers
   cleaned = cleaned.replace(/[\+]?[\d\s\-().]{7,}/g, "");
 
-  // Only match explicit URLs: http(s):// or www. prefix — no bare domain patterns
-  const patterns = /\bhttps?:\/\/[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}[^\s)"]*/gi;
-  const wwwPatterns = /\bwww\.[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}[^\s)"]*/gi;
+  // 1. Explicit URLs: http(s):// or www. prefix
+  const httpMatches = cleaned.match(/\bhttps?:\/\/[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}[^\s)"]*/gi) || [];
+  const wwwMatches = cleaned.match(/\bwww\.[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}[^\s)"]*/gi) || [];
 
-  const matches = [...(cleaned.match(patterns) || []), ...(cleaned.match(wwwPatterns) || [])];
-  for (const m of matches) {
+  for (const m of [...httpMatches, ...wwwMatches]) {
+    if (m.includes("@")) continue; // Never an email
     const domain = m.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].toLowerCase();
     if (!EXCLUDED_DOMAINS.some(d => domain.includes(d))) return m;
   }
+
+  // 2. Facebook "Website" label — Facebook displays contact info as "Website\n[domain]"
+  //    or "Website: domain.com" or with a globe icon followed by the URL
+  const websiteLabel = cleaned.match(/Website[:\s]+([^\n@]+)/i);
+  if (websiteLabel) {
+    const candidate = websiteLabel[1].trim().split(/\s/)[0]; // First word/token after label
+    if (candidate.length > 4 && candidate.includes(".") && !candidate.includes("@")) {
+      const domain = candidate.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].toLowerCase();
+      if (!EXCLUDED_DOMAINS.some(d => domain.includes(d))) return candidate;
+    }
+  }
+
   return null;
 }
 
