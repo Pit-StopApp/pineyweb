@@ -260,8 +260,9 @@ async function moveMouse(page: Page, targetX: number, targetY: number, tier: Spe
 // SECTION 3: HUMAN INPUT PRIMITIVES
 // ============================================================================
 
+const PACE = 0.7; // Global pause multiplier — applies to all delays
 async function humanDelay(page: Page, min: number, max: number) {
-  await page.waitForTimeout(randInt(min, max, "delay"));
+  await page.waitForTimeout(randInt(Math.round(min * PACE), Math.round(max * PACE), "delay"));
 }
 
 async function humanClick(page: Page, x: number, y: number, tier: SpeedTier = "normal") {
@@ -453,19 +454,12 @@ function sanitizePageText(text: string): string {
 }
 
 function extractCleanEmail(text: string): string | null {
-  const regex = /[a-zA-Z][a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+  // Match email with TLD capped at 2-6 chars, followed by non-alpha or end-of-string
+  const regex = /[a-zA-Z][a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}(?=[^a-zA-Z]|$)/g;
   const matches = text.match(regex);
   if (!matches) return null;
-  for (const match of matches) {
-    const emailRegex = /^[a-zA-Z][a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    let email = match;
-    while (email.length > 0) {
-      if (emailRegex.test(email)) {
-        if (!email.includes("@facebook.com") && !email.includes("@fb.com") && !email.includes("@sentry") && email.length < 100) return email;
-        break;
-      }
-      email = email.slice(0, -1);
-    }
+  for (const email of matches) {
+    if (!email.includes("@facebook.com") && !email.includes("@fb.com") && !email.includes("@sentry") && email.length < 100) return email;
   }
   return null;
 }
@@ -709,8 +703,15 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
     }
 
     const isMatch = fuzzyMatch(text, matchName, city);
+    // Strict city check: reject if candidate text contains a different city
+    const textLower = text.toLowerCase();
+    const cityLower = city.toLowerCase();
+    const hasDifferentCity = textLower.includes(" - ") && !textLower.includes(cityLower);
+    if (isMatch && hasDifferentCity) {
+      console.log(`[${ts()}]   Candidate: "${text}" → name match but wrong city (expected ${city}) — skipping`);
+      continue;
+    }
     console.log(`[${ts()}]   Candidate: "${text}" → ${isMatch ? "MATCH" : "no match"}`);
-
 
     if (isMatch) {
       // Navigate to matched candidate's page
@@ -779,6 +780,9 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
 
   // Check remaining candidates without hovering
   for (let i = toScan; i < candidates.length; i++) {
+    // Strict city check on remaining candidates
+    const candLower = candidates[i].text.toLowerCase();
+    if (candLower.includes(" - ") && !candLower.includes(city.toLowerCase())) continue;
     if (fuzzyMatch(candidates[i].text, matchName, city)) {
       console.log(`[${ts()}]   Matched: "${candidates[i].text}"`);
       console.log(`[${ts()}]   Navigating to matched page: ${candidates[i].href}`);
@@ -860,9 +864,14 @@ async function searchFacebook(page: Page, businessName: string, city: string, ph
   }
 
   // Steps 14-23: Retry with simplified name
-  const SUFFIX_WORDS = new Set(["llc","inc","co","corp","ltd","pllc","pc","pa","dba","tx","texas","dds","md","jr","sr","ii","iii"]);
+  const SUFFIX_WORDS = new Set(["llc","inc","co","corp","ltd","pllc","pc","pa","dba","tx","texas","dds","md","jr","sr","ii","iii","the","a","an","and","of"]);
   const cityLower = city.toLowerCase();
-  const meaningful = businessName.split(/\s+/).filter(w => { const l = w.replace(/[^a-zA-Z]/g, "").toLowerCase(); return l.length > 0 && !SUFFIX_WORDS.has(l) && l !== cityLower; });
+  // Strip punctuation, then filter: no suffixes, no single letters, no city name
+  const cleaned = businessName.replace(/[^a-zA-Z0-9&\s]/g, " ").replace(/\s+/g, " ").trim();
+  const meaningful = cleaned.split(/\s+/).filter(w => {
+    const l = w.toLowerCase();
+    return l.length > 1 && !SUFFIX_WORDS.has(l) && l !== cityLower;
+  });
   const simplified = meaningful.slice(0, Math.min(3, meaningful.length)).join(" ");
 
   if (meaningful.length >= 2) {
@@ -1127,7 +1136,7 @@ async function main() {
           // Minimize browser — simulate switching to Mail
           await page.keyboard.press("Meta+M");
           // Stay unfocused 8-12s — drafting email, pasting prospect info
-          await page.waitForTimeout(randInt(8000, 12000, "mailDraft"));
+          await page.waitForTimeout(randInt(Math.round(8000 * PACE), Math.round(12000 * PACE), "mailDraft"));
           // Mouse drifts back up from dock toward browser
           await moveMouse(page, randInt(300, 800, "returnX"), randInt(200, 400, "returnY"), "slow");
           // Refocus browser
