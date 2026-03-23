@@ -28,8 +28,6 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const WEBSHARE_API_KEY = process.env.WEBSHARE_API_KEY;
 const PINEYWEB_URL = process.env.PINEYWEB_URL || "https://pineyweb.com";
-const SESSION_FILE = process.env.FACEBOOK_STATE_FILE || "scripts/fb-session.json";
-const DAILY_EMAIL_CAP = 200;
 
 if (!SUPABASE_URL || !SUPABASE_KEY) { console.error("Missing Supabase env vars"); process.exit(1); }
 if (!WEBSHARE_API_KEY) { console.error("Missing WEBSHARE_API_KEY"); process.exit(1); }
@@ -229,11 +227,6 @@ async function main() {
   const sessionId = `phase2-${sessionDate.replace(/[:.]/g, "-").slice(0, 19)}`;
 
   for (let i = 0; i < prospects.length; i++) {
-    if (emailsFound >= DAILY_EMAIL_CAP) {
-      console.log(`\n[${ts()}] Daily email cap (${DAILY_EMAIL_CAP}) reached. Stopping.`);
-      break;
-    }
-
     const p = prospects[i];
 
     // Get all candidates for this prospect, ordered by rank
@@ -276,13 +269,7 @@ async function main() {
 
         const page = await context.newPage();
 
-        // Load Facebook session cookies if available
-        const sessionPath = path.resolve(SESSION_FILE);
-        if (fs.existsSync(sessionPath)) {
-          const cookies = JSON.parse(fs.readFileSync(sessionPath, "utf-8"));
-          await context.addCookies(cookies);
-        }
-
+        // Anonymous — no cookies, no login, fresh context via proxy
         // Navigate to candidate URL
         await page.goto(candidate.facebook_url, { waitUntil: "domcontentloaded", timeout: 15000 });
         await page.waitForTimeout(2000);
