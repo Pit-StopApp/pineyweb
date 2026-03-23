@@ -471,28 +471,31 @@ function fuzzyClean(s: string, city?: string): string {
   return c;
 }
 
-// Words too common to be sole basis for a match
-const SOLE_MATCH_BLACKLIST = new Set(["smith","auto","hair","fitness","electric","repair","center","care","family","texas","tx","services","solutions","heating","air","roofing","salon","barber","nails","beauty","spa","plumbing","chris","first","new","custom","pro","american","national","quality","home","west","east","north","south"]);
-
-function fuzzyMatch(pageName: string, businessName: string, city?: string): boolean {
+// Fuzzy match score — returns 0-100% match quality
+function fuzzyMatchScore(pageName: string, businessName: string, city?: string): number {
   const a = fuzzyClean(pageName, city), b = fuzzyClean(businessName, city);
-  const aWords = a.split(" ").filter(w => w.length > 1), bWords = b.split(" ").filter(w => w.length > 1);
+  if (a === b) return 100;
+
+  const aWords = a.split(" ").filter(w => w.length > 1);
+  const bWords = b.split(" ").filter(w => w.length > 1);
   const aUniq = new Set(aWords.filter(w => !GENERIC_WORDS.has(w)));
   const bUniq = bWords.filter(w => !GENERIC_WORDS.has(w));
+  if (bUniq.length === 0 || aUniq.size === 0) return 0;
+
   const overlap = bUniq.filter(w => aUniq.has(w));
-  if (overlap.length === 0) return false;
+  if (overlap.length === 0) return 0;
 
-  // Require at least 2 matching significant words, OR 1 highly unique word
-  if (overlap.length === 1) {
-    const soleWord = overlap[0];
-    if (SOLE_MATCH_BLACKLIST.has(soleWord) || soleWord.length <= 3) return false;
-  }
+  // Substring containment bonus
+  const aC = aWords.filter(w => !GENERIC_WORDS.has(w)).join(" ");
+  const bC = bUniq.join(" ");
+  if (aC.includes(bC) || bC.includes(aC)) return Math.max(90, (overlap.length / bUniq.length) * 100);
 
-  // Substring containment check
-  const aC = aWords.filter(w => !GENERIC_WORDS.has(w)).join(" "), bC = bUniq.join(" ");
-  if (aC.includes(bC) || bC.includes(aC) || aC === bC) return true;
-  if (bUniq.length === 0) return false;
-  return overlap.length / bUniq.length >= 0.5;
+  return (overlap.length / bUniq.length) * 100;
+}
+
+// Boolean wrapper — 75% threshold for candidate matching
+function fuzzyMatch(pageName: string, businessName: string, city?: string): boolean {
+  return fuzzyMatchScore(pageName, businessName, city) >= 75;
 }
 
 function humanizeQuery(name: string, city: string): string {
@@ -800,16 +803,17 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
     await gazeAtBox(page, box);
     await humanDelay(page, 300, 800);
 
-    const isMatch = fuzzyMatch(text, matchName, city);
+    const score = fuzzyMatchScore(text, matchName, city);
+    const isMatch = score >= 75;
     // Strict city check: reject if candidate text contains a different city
     const textLower = text.toLowerCase();
     const cityLower = city.toLowerCase();
     const hasDifferentCity = textLower.includes(" - ") && !textLower.includes(cityLower);
     if (isMatch && hasDifferentCity) {
-      console.log(`[${ts()}]   Candidate: "${text}" → name match but wrong city (expected ${city}) — skipping`);
+      console.log(`[${ts()}]   Candidate: "${text}" → ${score.toFixed(0)}% match but wrong city — skipping`);
       continue;
     }
-    console.log(`[${ts()}]   Candidate: "${text}" → ${isMatch ? "MATCH" : "no match"}`);
+    console.log(`[${ts()}]   Candidate: "${text}" → ${score.toFixed(0)}%${isMatch ? " MATCH" : " no match"}`);
 
     if (isMatch) {
       // Navigate to matched candidate's page
@@ -859,21 +863,33 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
       }
       console.log(`[${ts()}]   No website found — proceeding`);
 
-      // 2. PHONE + CITY CONFIRMATION — second
+      // 2. NAME SCORE + PHONE + CITY — match hierarchy
+      const nameScore = fuzzyMatchScore(text, matchName, city);
+      console.log(`[${ts()}]   Name match score: ${nameScore.toFixed(0)}%`);
+
+      if (nameScore < 75) {
+        console.log(`[${ts()}]   Name below 75% — skipping regardless of phone/city`);
+        return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
+      }
+
       const phoneOk = await confirmPhoneMatch(page, phone);
+      console.log(`[${ts()}]   Phone check result: ${phoneOk ? "confirmed" : "mismatch"}`);
+
       const scrapedCity = await scrapeCityFromPage(page);
       const cityConfirmed = scrapedCity ? scrapedCity.toLowerCase().includes(city.toLowerCase()) || city.toLowerCase().includes(scrapedCity.toLowerCase()) : false;
+      if (scrapedCity) console.log(`[${ts()}]   City from page: ${scrapedCity} — ${cityConfirmed ? "confirmed" : "mismatch"}`);
 
       if (scrapedCity && !cityConfirmed) {
         console.log(`[${ts()}]   City mismatch — page shows ${scrapedCity}, prospect is ${city} — skipping`);
         return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
       }
-      if (!phoneOk && !cityConfirmed) {
-        console.log(`[${ts()}]   Phone mismatch + city unverified — skipping`);
-        return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
+
+      // Match hierarchy: name 75%+ is the gate, phone/city provide confidence
+      if (phoneOk || cityConfirmed) {
+        console.log(`[${ts()}]   Proceeding — name ${nameScore.toFixed(0)}%${phoneOk ? " + phone" : ""}${cityConfirmed ? " + city" : ""}`);
+      } else {
+        console.log(`[${ts()}]   ⚠ Proceeding with name match only (${nameScore.toFixed(0)}%) — no phone or city confirmation`);
       }
-      if (phoneOk) console.log(`[${ts()}]   Phone confirmed${cityConfirmed ? ", city confirmed" : ""}`);
-      else console.log(`[${ts()}]   Phone mismatch but city confirmed (${scrapedCity}) — proceeding with caution`);
 
       // 3. LAST POST DATE CHECK — third
       console.log(`[${ts()}]   Checking last post date...`);
