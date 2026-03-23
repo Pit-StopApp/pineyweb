@@ -601,10 +601,8 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
       await page.goto(contactUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
     }
 
-    // Step 45: Single continuous read (2-4s)
+    // Step 45: Single continuous read (2-4s) — mouse stationary while reading
     await humanDelay(page, 2000, 4000);
-    // Mouse drifts loosely near content
-    await moveMouse(page, randInt(200, 800, "readDrift"), randInt(300, 500, "readDriftY"), "slow");
 
     if (isRedirectedToPersonalProfile(page.url())) return { email: null, website };
 
@@ -622,8 +620,7 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
       if (email) return { email, website: contactWebsite || extractWebsiteUrl(scrolledText) };
     }
 
-    // Step 45 end: No email found — linger
-    await moveMouse(page, randInt(200, 700, "linger"), randInt(200, 500, "lingerY"), "slow");
+    // Step 45 end: No email found — linger, mouse stationary
     await humanDelay(page, 2000, 4000);
 
     return { email: null, website: contactWebsite };
@@ -681,12 +678,10 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
         await page.goto(candidates[i].href, { waitUntil: "domcontentloaded", timeout: 15000 });
       }
 
-      // Step 37: Page load pause
+      // Step 37: Page load pause — mouse stationary
       await humanDelay(page, 800, 2000);
       // Step 38: Mouse stationary while eyes read
       await humanDelay(page, 300, 900);
-      // Step 39: Mouse drifts around page
-      await moveMouse(page, randInt(200, 900, "driftX"), randInt(200, 500, "driftY"), "slow");
 
       await checkForPopup(page);
 
@@ -694,9 +689,8 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
 
       // Step 40: Scroll toward Contact/About section
       await scrollWithInertia(page, randInt(300, 600, "bizScroll"));
-      // Step 41: Random pause scanning page
+      // Step 41: Random pause scanning page — mouse stationary while eyes read
       await humanDelay(page, 1000, 3000);
-      await moveMouse(page, randInt(200, 800, "scanX"), randInt(200, 500, "scanY"), "slow");
 
       const phoneOk = await confirmPhoneMatch(page, phone);
       console.log(`[${ts()}]   ${phoneOk ? "Phone confirmed" : "Phone mismatch but name/city match, proceeding"}`);
@@ -753,7 +747,6 @@ async function searchFacebook(page: Page, businessName: string, city: string, ph
   await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
   await humanDelay(page, 2000, 4000);
   await scrollWithInertia(page, randInt(100, 300, "searchScroll"));
-  await moveMouse(page, randInt(200, 800, "searchDrift"), randInt(200, 500, "searchDriftY"), "slow");
 
   if (page.url().includes("/login")) {
     console.log(`[${ts()}]   Session expired — redirected to login`);
@@ -785,7 +778,6 @@ async function searchFacebook(page: Page, businessName: string, city: string, ph
     await page.goto(retryUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
     await humanDelay(page, 2000, 4000);
     await scrollWithInertia(page, randInt(100, 300, "retryScroll"));
-    await moveMouse(page, randInt(200, 800, "retryDrift"), randInt(200, 500, "retryDriftY"), "slow");
     await humanDelay(page, 2000, 3500);
 
     const retryCandidates = await collectCandidates(page);
