@@ -12,6 +12,13 @@
 # Facebook session cookies
 scripts/fb-session.json
 
+# Migration scripts (contain env-specific config)
+scripts/migrate-supabase.ts
+scripts/import-to-new-supabase.ts
+scripts/run-migrations.mjs
+scripts/run-migrations-rest.mjs
+scripts/migration-export/
+
 # Facebook scraper session reports
 scripts/session-reports/
 
