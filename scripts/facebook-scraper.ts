@@ -848,14 +848,64 @@ async function main() {
   const prospects = shuffleArray(filtered);
   console.log(`[${ts()}] Loaded ${prospects.length} prospects\n`);
 
-  const browser = await chromium.launch({ headless: false, args: ["--disable-blink-features=AutomationControlled"] });
   const vpW = randInt(1280, 1480, "vpW"), vpH = randInt(800, 1000, "vpH");
-  const context = await browser.newContext({ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", viewport: { width: vpW, height: vpH } });
-  const page = await context.newPage();
-  // Inject cursor overlay after every navigation
-  page.on("load", () => { injectCursorOverlay(page).catch(() => {}); });
-  await loadOrCreateSession(context, page);
-  await injectCursorOverlay(page);
+
+  async function launchBrowser() {
+    const b = await chromium.launch({ headless: false, args: ["--disable-blink-features=AutomationControlled"] });
+    const ctx = await b.newContext({ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", viewport: { width: vpW, height: vpH } });
+    const pg = await ctx.newPage();
+    pg.on("load", () => { injectCursorOverlay(pg).catch(() => {}); });
+    await loadOrCreateSession(ctx, pg);
+    await injectCursorOverlay(pg);
+    return { browser: b, context: ctx, page: pg };
+  }
+
+  let { browser, context, page } = await launchBrowser();
+
+  function isBrowserAlive(): boolean {
+    try { return browser.isConnected(); } catch { return false; }
+  }
+
+  async function verifyPageState(): Promise<boolean> {
+    try {
+      if (!isBrowserAlive()) return false;
+      const url = page.url();
+      if (!url || url === "about:blank") return false;
+      // Verify page is responsive
+      await page.evaluate(() => document.readyState);
+      // Navigate back to facebook.com if not already there
+      if (!url.includes("facebook.com")) {
+        await page.goto("https://www.facebook.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
+        await injectCursorOverlay(page);
+        await humanDelay(page, 1500, 3000);
+      }
+      return true;
+    } catch { return false; }
+  }
+
+  async function recoverBrowser(): Promise<boolean> {
+    console.log(`[${ts()}] Browser context lost — attempting recovery`);
+    try { await browser.close(); } catch {}
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        console.log(`[${ts()}] Recovery attempt ${attempt}/2...`);
+        const result = await launchBrowser();
+        browser = result.browser;
+        context = result.context;
+        page = result.page;
+        // Verify session is valid
+        const alive = await verifyPageState();
+        if (alive) {
+          console.log(`[${ts()}] Recovery successful — resuming`);
+          return true;
+        }
+      } catch (err) {
+        console.log(`[${ts()}] Recovery attempt ${attempt} failed: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+    console.log(`[${ts()}] Recovery failed after 2 attempts — exiting`);
+    return false;
+  }
 
   // Step 4: Random idle pause before doing anything
   await humanDelay(page, 1500, 4000);
@@ -946,6 +996,12 @@ async function main() {
 
     const p = prospects[i];
     console.log(`\n[${ts()}] [${i + 1}/${total}] ${p.business_name} (${p.city}) — T${p.priority_tier}, ${p.rating}★, ${p.review_count} reviews`);
+
+    // Verify page state before each prospect
+    if (!await verifyPageState()) {
+      const recovered = await recoverBrowser();
+      if (!recovered) { saveReport(); break; }
+    }
 
     try {
       const result = await searchFacebook(page, p.business_name, p.city, p.phone);
@@ -1053,8 +1109,20 @@ async function main() {
       if (tested % 10 === 0) logProgress();
       if (tested % 25 === 0) saveReport();
     } catch (err) {
-      console.log(`[${ts()}]   ✗ Error: ${err instanceof Error ? err.message : err}`);
-      sessionRows.push({ session_date: sessionDate, session_id: sessionId, prospect_name: p.business_name, facebook_page_found: "", match_type: "no_match", phone_confirmed: "false", email_found: "", email_sent: "false", facebook_url: "", city: p.city, notes: `error: ${err instanceof Error ? err.message : err}`, match_verified: "", verification_reason: "" });
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const isBrowserCrash = errMsg.includes("Target page") || errMsg.includes("context or browser has been closed") || errMsg.includes("Target closed") || errMsg.includes("Browser has been closed") || !isBrowserAlive();
+
+      if (isBrowserCrash) {
+        console.log(`[${ts()}]   ✗ Browser crash: ${errMsg}`);
+        const recovered = await recoverBrowser();
+        if (!recovered) { saveReport(); break; }
+        // Retry the same prospect (decrement i so the loop re-processes it)
+        i--;
+        continue;
+      }
+
+      console.log(`[${ts()}]   ✗ Error: ${errMsg}`);
+      sessionRows.push({ session_date: sessionDate, session_id: sessionId, prospect_name: p.business_name, facebook_page_found: "", match_type: "no_match", phone_confirmed: "false", email_found: "", email_sent: "false", facebook_url: "", city: p.city, notes: `error: ${errMsg}`, match_verified: "", verification_reason: "" });
       tested++;
       if (tested % 10 === 0) logProgress();
       if (tested % 25 === 0) saveReport();
