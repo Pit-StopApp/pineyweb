@@ -1,16 +1,11 @@
 /**
- * Google Custom Search — Facebook URL Discovery
+ * Google Custom Search — Facebook URL Discovery (Phase 1)
  *
  * Finds Facebook page URLs for all prospects using Google CSE
- * restricted to facebook.com. No browser, no Playwright — pure API.
+ * restricted to facebook.com. Stores ALL candidates per prospect
+ * in pineyweb_prospect_facebook_candidates for Phase 2 verification.
  *
  * Usage: npx tsx scripts/google-search.ts
- *
- * Requires in .env.local:
- *   GOOGLE_CUSTOM_SEARCH_KEY
- *   GOOGLE_CSE_ID
- *   NEXT_PUBLIC_SUPABASE_URL
- *   SUPABASE_SERVICE_ROLE_KEY
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -32,14 +27,10 @@ function ts(): string { return new Date().toLocaleTimeString(); }
 // ============================================================================
 
 const GENERIC = new Set(["the","a","an","and","of","in","at","for","to","on","or","llc","inc","co","corp","ltd","pllc","pc","pa","dba","tx","texas"]);
-const SUFFIX = new Set(["llc","inc","co","corp","ltd","pllc","pc","pa","dba","tx","texas","dds","md","jr","sr","ii","iii"]);
+const SUFFIX = new Set(["llc","inc","co","corp","ltd","pllc","pc","pa","dba","tx","texas","dds","md","jr","sr","ii","iii","the","a","an","and","of"]);
 
 function cleanName(s: string): string {
-  return s.toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/['''""",.\-–—()!@#$%^*]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return s.toLowerCase().replace(/&/g, " and ").replace(/['''""",.\-–—()!@#$%^*]/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function simplifyName(name: string, city: string): string {
@@ -65,12 +56,9 @@ function scoreMatch(resultTitle: string, prospectName: string, prospectCity: str
   const overlap = bWords.filter(w => aSet.has(w));
   let score = (overlap.length / bWords.length) * 100;
 
-  // Bonus: substring containment
   const aJoined = aWords.join(" ");
   const bJoined = bWords.join(" ");
   if (aJoined.includes(bJoined) || bJoined.includes(aJoined)) score = Math.max(score, 90);
-
-  // Bonus: city appears in result
   if (a.includes(prospectCity.toLowerCase())) score = Math.min(100, score + 5);
 
   return Math.round(score);
@@ -78,11 +66,9 @@ function scoreMatch(resultTitle: string, prospectName: string, prospectCity: str
 
 function extractFacebookUrl(link: string): string | null {
   if (!link.includes("facebook.com")) return null;
-  // Clean tracking params, keep the base URL
   try {
     const url = new URL(link);
     const clean = `${url.origin}${url.pathname}`.replace(/\/$/, "");
-    // Skip search/help/policy pages
     if (clean.includes("/search") || clean.includes("/help") || clean.includes("/policies")) return null;
     return clean;
   } catch { return link; }
@@ -95,7 +81,7 @@ function extractFacebookUrl(link: string): string | null {
 interface SearchResult { title: string; link: string; snippet: string; }
 
 async function googleSearch(query: string): Promise<SearchResult[]> {
-  const url = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(query)}&key=${GOOGLE_KEY}&cx=${CSE_ID}&num=5`;
+  const url = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(query)}&key=${GOOGLE_KEY}&cx=${CSE_ID}&num=10`;
   const res = await fetch(url);
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
@@ -109,25 +95,19 @@ async function googleSearch(query: string): Promise<SearchResult[]> {
   }));
 }
 
-function scoreBestResult(results: SearchResult[], prospectName: string, city: string): { url: string | null; score: number; title: string } {
-  let bestUrl: string | null = null;
-  let bestScore = 0;
-  let bestTitle = "";
+interface Candidate { url: string; score: number; method: string; title: string; }
 
+function extractCandidates(results: SearchResult[], prospectName: string, city: string, method: string): Candidate[] {
+  const candidates: Candidate[] = [];
   for (const r of results) {
     const fbUrl = extractFacebookUrl(r.link);
     if (!fbUrl) continue;
     const titleScore = scoreMatch(r.title, prospectName, city);
     const snippetScore = scoreMatch(r.snippet, prospectName, city);
     const score = Math.max(titleScore, snippetScore);
-    if (score > bestScore) {
-      bestScore = score;
-      bestUrl = fbUrl;
-      bestTitle = r.title;
-    }
+    candidates.push({ url: fbUrl, score, method, title: r.title });
   }
-
-  return { url: bestUrl, score: bestScore, title: bestTitle };
+  return candidates;
 }
 
 // ============================================================================
@@ -135,7 +115,7 @@ function scoreBestResult(results: SearchResult[], prospectName: string, city: st
 // ============================================================================
 
 async function main() {
-  console.log(`[${ts()}] Google Search — Facebook URL Discovery\n`);
+  console.log(`[${ts()}] Google Search — Facebook URL Discovery (Phase 1)\n`);
 
   // Fetch all prospects needing facebook_url
   const allProspects: { id: string; place_id: string; business_name: string; city: string }[] = [];
@@ -158,7 +138,7 @@ async function main() {
   console.log(`[${ts()}] Found ${allProspects.length} prospects without facebook_url\n`);
   if (allProspects.length === 0) return;
 
-  let found = 0, foundExact = 0, foundSimplified = 0, notFound = 0, errors = 0;
+  let found = 0, foundExact = 0, foundSimplified = 0, notFound = 0, errors = 0, totalCandidates = 0;
   let totalQueries = 0;
 
   const BATCH_SIZE = 10;
@@ -171,37 +151,61 @@ async function main() {
       const exactQuery = `${p.business_name} ${p.city} TX`;
       totalQueries++;
       const exactResults = await googleSearch(exactQuery);
-      const exact = scoreBestResult(exactResults, p.business_name, p.city);
+      const exactCandidates = extractCandidates(exactResults, p.business_name, p.city, "exact");
 
       // Call 2: Simplified fallback
       const simplified = simplifyName(p.business_name, p.city);
-      let simp = { url: null as string | null, score: 0, title: "" };
-      if (simplified && simplified !== p.business_name.trim()) {
+      let simpCandidates: Candidate[] = [];
+      if (simplified && simplified.toLowerCase() !== p.business_name.trim().toLowerCase()) {
         const simpQuery = `${simplified} ${p.city} TX`;
         totalQueries++;
         const simpResults = await googleSearch(simpQuery);
-        simp = scoreBestResult(simpResults, p.business_name, p.city);
+        simpCandidates = extractCandidates(simpResults, p.business_name, p.city, "simplified");
       }
 
-      // Pick the best result
-      const best = exact.score >= simp.score ? exact : simp;
-      const method = exact.score >= simp.score ? "exact" : "simplified";
+      // Deduplicate by URL — keep highest score per URL
+      const urlMap = new Map<string, Candidate>();
+      for (const c of [...exactCandidates, ...simpCandidates]) {
+        const existing = urlMap.get(c.url);
+        if (!existing || c.score > existing.score) {
+          urlMap.set(c.url, c);
+        }
+      }
 
-      if (best.url && best.score >= 60) {
-        found++;
-        if (method === "exact") foundExact++; else foundSimplified++;
+      // Sort by score descending, assign ranks
+      const allCandidates = [...urlMap.values()].sort((a, b) => b.score - a.score);
+
+      if (allCandidates.length > 0) {
+        // Store all candidates in the candidates table
+        const rows = allCandidates.map((c, idx) => ({
+          prospect_id: p.id,
+          facebook_url: c.url,
+          match_score: c.score,
+          search_method: c.method,
+          rank: idx + 1,
+        }));
+        await supabase.from("pineyweb_prospect_facebook_candidates").insert(rows);
+
+        // Update prospect with rank 1 result for backward compatibility
+        const best = allCandidates[0];
         await supabase.from("pineyweb_prospects").update({
           facebook_url: best.url,
           facebook_found: true,
           facebook_match_score: best.score,
-          facebook_search_method: method,
+          facebook_search_method: best.method,
         }).eq("id", p.id);
+
+        found++;
+        totalCandidates += allCandidates.length;
+        if (best.method === "exact") foundExact++; else foundSimplified++;
+        console.log(`[${ts()}]   ${p.business_name} → ${allCandidates.length} candidates (best: ${best.score}% — ${best.url})`);
       } else {
         notFound++;
         await supabase.from("pineyweb_prospects").update({
           facebook_found: false,
-          facebook_match_score: best.score || 0,
+          facebook_match_score: 0,
         }).eq("id", p.id);
+        console.log(`[${ts()}]   ${p.business_name} → 0 candidates`);
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -210,15 +214,15 @@ async function main() {
       try {
         await new Promise(r => setTimeout(r, 2000));
         totalQueries++;
-        const retryQuery = `${p.business_name} ${p.city} TX`;
-        const retryResults = await googleSearch(retryQuery);
-        const retry = scoreBestResult(retryResults, p.business_name, p.city);
-        if (retry.url && retry.score >= 60) {
-          found++; foundExact++;
-          await supabase.from("pineyweb_prospects").update({
-            facebook_url: retry.url, facebook_found: true,
-            facebook_match_score: retry.score, facebook_search_method: "exact",
-          }).eq("id", p.id);
+        const retryResults = await googleSearch(`${p.business_name} ${p.city} TX`);
+        const retryCandidates = extractCandidates(retryResults, p.business_name, p.city, "exact");
+
+        if (retryCandidates.length > 0) {
+          const sorted = retryCandidates.sort((a, b) => b.score - a.score);
+          const rows = sorted.map((c, idx) => ({ prospect_id: p.id, facebook_url: c.url, match_score: c.score, search_method: c.method, rank: idx + 1 }));
+          await supabase.from("pineyweb_prospect_facebook_candidates").insert(rows);
+          await supabase.from("pineyweb_prospects").update({ facebook_url: sorted[0].url, facebook_found: true, facebook_match_score: sorted[0].score, facebook_search_method: "exact" }).eq("id", p.id);
+          found++; foundExact++; totalCandidates += sorted.length;
         } else {
           notFound++;
           await supabase.from("pineyweb_prospects").update({ facebook_found: false }).eq("id", p.id);
@@ -238,7 +242,7 @@ async function main() {
     // Progress logging every 100 prospects
     if ((i + 1) % 100 === 0 || i === allProspects.length - 1) {
       const cost = (totalQueries * 0.005).toFixed(2);
-      console.log(`[${ts()}] [${i + 1}/${allProspects.length}] Found: ${found} (${foundExact} exact, ${foundSimplified} simplified) | Not found: ${notFound} | Errors: ${errors} | Queries: ${totalQueries} (~$${cost})`);
+      console.log(`\n[${ts()}] [${i + 1}/${allProspects.length}] Found: ${found} (${foundExact} exact, ${foundSimplified} simplified) | Not found: ${notFound} | Errors: ${errors} | Candidates: ${totalCandidates} | Queries: ${totalQueries} (~$${cost})\n`);
     }
   }
 
@@ -247,6 +251,8 @@ async function main() {
   console.log(`\n=== Session Report ===`);
   console.log(`Total prospects: ${allProspects.length}`);
   console.log(`Facebook found: ${found} (${foundExact} exact, ${foundSimplified} simplified)`);
+  console.log(`Total candidates stored: ${totalCandidates}`);
+  console.log(`Avg candidates per prospect: ${found > 0 ? (totalCandidates / found).toFixed(1) : 0}`);
   console.log(`Not found: ${notFound}`);
   console.log(`Errors: ${errors}`);
   console.log(`Total API queries: ${totalQueries}`);
