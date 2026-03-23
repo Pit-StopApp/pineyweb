@@ -33,7 +33,7 @@
  * - Break system: every 15-30 prospects, 3-7min, feed surf (60%) or idle (40%)
  * - Daily email cap (200) with graceful mid-prospect completion
  * - Popup/login wall detection before every navigation, click, and search submission
- * - Unfocus simulation with three drift destinations (dock/notes/edge)
+ * - Unfocus simulation: dock drift → Mail app draft (8-12s) → return to browser
  * - Visible cursor overlay tracking all bezier movements
  * - Full business logic preserved: Claude AI verification, Supabase, CSV, outreach
  *
@@ -970,8 +970,18 @@ async function main() {
       if (!recovered) { saveReport(); break; }
     }
 
+    const prospectStart = Date.now();
     try {
-      const result = await searchFacebook(page, p.business_name, p.city, p.phone);
+      // Hard 51 second cap per prospect
+      const PROSPECT_TIMEOUT_MS = 51000;
+      const prospectTimer = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("PROSPECT_TIMEOUT")), PROSPECT_TIMEOUT_MS)
+      );
+
+      const result = await Promise.race([
+        searchFacebook(page, p.business_name, p.city, p.phone),
+        prospectTimer,
+      ]);
       const { url, email, website, inactive, inactiveReason, matchType, phoneConfirmed, matchedPageName } = result;
       let rowNotes = "", emailSentThisRow = false, matchVerified = "", verificationReason = "";
 
@@ -999,37 +1009,29 @@ async function main() {
         verificationReason = reason;
 
         if (verified && confidence >= 7) {
-          // Steps 49-57: Email extraction behavior
-          // Step 49: Eyes find email, pause before mouse
+          // Email found — unfocus sequence: simulate opening Mail app
+          // Eyes find email, pause before mouse
           await humanDelay(page, 300, 700);
-          // Step 50: Mouse drifts near email
+          // Mouse drifts near email
           await moveMouse(page, randInt(300, 700, "emailDrift"), randInt(250, 450, "emailDriftY"), "slow");
-          // Step 51: Pause as if writing it down
+          // Pause as if noting the email mentally
           await humanDelay(page, 2000, 4000);
-          // Step 52: Pause before unfocusing
-          await humanDelay(page, 500, 1500);
 
-          // Step 53: Unfocus — drift toward one of three destinations
-          const dest = Math.random();
-          if (dest < 0.4) {
-            // Dock (bottom of screen)
-            await moveMouse(page, randInt(400, 800, "dockX"), vpH - randInt(5, 30, "dockY"), "normal");
-          } else if (dest < 0.7) {
-            // Right edge (Notes)
-            await moveMouse(page, vpW - randInt(5, 30, "notesX"), randInt(200, 500, "notesY"), "normal");
-          } else {
-            // Left edge
-            await moveMouse(page, randInt(5, 30, "edgeX"), randInt(200, 500, "edgeY"), "normal");
-          }
-
-          // Step 54: Stay unfocused
+          // Mouse drifts down toward dock (Mail app) — slow/deliberate
+          await moveMouse(page, randInt(400, 700, "dockX"), vpH - randInt(5, 25, "dockY"), "slow");
+          // Pause as if clicking Mail and waiting for it to open
+          await humanDelay(page, 1000, 3000);
+          // Minimize browser — simulate switching to Mail
           await page.keyboard.press("Meta+M");
-          await page.waitForTimeout(randInt(3000, 8000, "unfocus"));
-
-          // Step 55-56: Refocus
+          // Stay unfocused 8-12s — drafting email, pasting prospect info
+          await page.waitForTimeout(randInt(8000, 12000, "mailDraft"));
+          // Mouse drifts back up from dock toward browser
+          await moveMouse(page, randInt(300, 800, "returnX"), randInt(200, 400, "returnY"), "slow");
+          // Refocus browser
           await page.bringToFront();
-          await humanDelay(page, 300, 600); // OS animation
-          // Step 57: Reorientation pause
+          // Hard wait for OS window animation
+          await humanDelay(page, 400, 800);
+          // Reorientation pause
           await humanDelay(page, 500, 1500);
 
           const { error: updateErr } = await supabase.from("pineyweb_prospects").update({ email, email_source: "Facebook", facebook_url: url }).eq("place_id", p.place_id);
@@ -1077,6 +1079,18 @@ async function main() {
       if (tested % 25 === 0) saveReport();
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
+
+      // Prospect timeout — skip and move on
+      if (errMsg === "PROSPECT_TIMEOUT") {
+        const elapsed = Math.round((Date.now() - prospectStart) / 1000);
+        console.log(`[${ts()}]   Prospect timeout (${elapsed}s) — skipping`);
+        sessionRows.push({ session_date: sessionDate, session_id: sessionId, prospect_name: p.business_name, facebook_page_found: "", match_type: "no_match", phone_confirmed: "false", email_found: "", email_sent: "false", facebook_url: "", city: p.city, notes: "timeout", match_verified: "", verification_reason: "" });
+        tested++;
+        if (tested % 10 === 0) logProgress();
+        if (tested % 25 === 0) saveReport();
+        continue;
+      }
+
       const isBrowserCrash = errMsg.includes("Target page") || errMsg.includes("context or browser has been closed") || errMsg.includes("Target closed") || errMsg.includes("Browser has been closed") || !isBrowserAlive();
 
       if (isBrowserCrash) {
