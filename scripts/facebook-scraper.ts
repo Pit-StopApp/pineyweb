@@ -539,23 +539,42 @@ async function scrapeCityFromPage(page: Page): Promise<string | null> {
 }
 
 // --- Website qualification check — runs FIRST before any other check ---
+const META_DOMAINS = ["facebook.com","fb.com","instagram.com","messenger.com","whatsapp.com","meta.com","wa.me","twitter.com","x.com","tiktok.com","youtube.com","google.com","apple.com"];
+
+function scanTextForWebsite(text: string): string | null {
+  const sanitized = sanitizePageText(text);
+  // Check via extractWebsiteUrl first
+  const website = extractWebsiteUrl(sanitized);
+  if (website) return website;
+  // Broad pattern scan for common website indicators
+  const webPatterns = /\bwww\.\S+|https?:\/\/\S+|\S+\.(com|net|org|io|co|biz)\b/gi;
+  const matches = sanitized.match(webPatterns);
+  if (matches) {
+    for (const m of matches) {
+      const domain = m.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].toLowerCase();
+      if (!META_DOMAINS.some(d => domain.includes(d))) return m;
+    }
+  }
+  return null;
+}
+
+// Two-pass website check: initial page content + scroll to About/Contact area
 async function checkForWebsite(page: Page): Promise<string | null> {
   try {
-    const pageText = await page.evaluate(() => document.body?.innerText || "").catch(() => "");
-    const sanitized = sanitizePageText(pageText);
-    // Check for website URLs
-    const website = extractWebsiteUrl(sanitized);
-    if (website) return website;
-    // Broad pattern scan for common website indicators
-    const webPatterns = /\bwww\.\S+|https?:\/\/\S+|\S+\.(com|net|org|io|co|biz)\b/gi;
-    const matches = sanitized.match(webPatterns);
-    if (matches) {
-      const IGNORED = ["facebook.com","fb.com","instagram.com","messenger.com","whatsapp.com","twitter.com","x.com","tiktok.com","youtube.com","google.com","apple.com"];
-      for (const m of matches) {
-        const domain = m.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].toLowerCase();
-        if (!IGNORED.some(d => domain.includes(d))) return m;
-      }
-    }
+    // Pass 1: Scan initial page load content
+    const initialText = await page.evaluate(() => document.body?.innerText || "").catch(() => "");
+    const found1 = scanTextForWebsite(initialText);
+    if (found1) return found1;
+
+    // Pass 2: Scroll down toward About/Contact section to trigger lazy loading
+    await scrollWithInertia(page, randInt(400, 700, "websiteCheckScroll"));
+    await humanDelay(page, 1000, 2000);
+
+    // Scan again with newly loaded content
+    const scrolledText = await page.evaluate(() => document.body?.innerText || "").catch(() => "");
+    const found2 = scanTextForWebsite(scrolledText);
+    if (found2) return found2;
+
     return null;
   } catch { return null; }
 }
@@ -846,7 +865,6 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
         return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
       }
 
-      // MOUSE FROZEN — no movement until website check completes
       await humanDelay(page, 800, 2000);
       await checkForPopup(page);
 
@@ -854,8 +872,8 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
       // QUALIFICATION — strict enforced order
       // ============================================================
 
-      // 1. WEBSITE CHECK — immediately on page load, before anything else
-      // No gazeAt, no scroll, no mouse movement before this completes
+      // 1. WEBSITE CHECK — scans initial content, scrolls to About/Contact,
+      //    scans again. Never concludes "no website" from initial load alone.
       console.log(`[${ts()}]   Checking for website...`);
       const websiteFound = await checkForWebsite(page);
       if (websiteFound) {
@@ -864,11 +882,9 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
       }
       console.log(`[${ts()}]   No website found — proceeding`);
 
-      // Mouse unfreezes — gaze at page title now that website check passed
+      // Gaze at page content (already scrolled during website check)
       await gazeAt(page, 'h1, [role="heading"]');
       await humanDelay(page, 500, 1200);
-      await scrollWithInertia(page, randInt(300, 600, "bizScroll"));
-      await humanDelay(page, 800, 1500);
 
       // 2. NAME SCORE + PHONE + CITY — match hierarchy
       const nameScore = fuzzyMatchScore(text, matchName, city);
