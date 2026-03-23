@@ -114,70 +114,98 @@ function randInt(min: number, max: number, key = "default"): number {
 
 interface Point { x: number; y: number; }
 
-function cubicBezier(t: number, p0: number, p1: number, p2: number, p3: number): number {
-  const u = 1 - t;
-  return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
-}
+// --- "Soft Bracket" mouse path generator ---
+// Phase 1 (70%): straight launch with gradual drift
+// Phase 2 (20%): soft hook correction toward destination
+// Phase 3 (10%): final landing with micro tremor
 
-function generateBezierPath(start: Point, end: Point): Point[] {
+let lastDriftDir = 0; // Track to prevent same drift direction twice
+let lastHookMag = 0;
+let lastLandOff = 0;
+
+function generateSoftBracketPath(start: Point, end: Point): Point[] {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const dist = Math.sqrt(dx * dx + dy * dy);
-  const perpX = -dy;
-  const perpY = dx;
+  if (dist < 2) return [start, end]; // Trivially short
 
-  // Generate control points with guaranteed minimum 5-degree deviation
-  // from a straight line. Reroll if path falls within 176-184 degrees.
-  const MIN_DEVIATION_RAD = 5 * Math.PI / 180; // 5 degrees
-  let cp1: Point, cp2: Point;
-  let attempts = 0;
-  do {
-    const curvature1 = rand(-0.3, 0.3, "curve1");
-    const curvature2 = rand(-0.3, 0.3, "curve2");
-    cp1 = {
-      x: start.x + dx * rand(0.2, 0.4, "cp1t") + perpX * curvature1,
-      y: start.y + dy * rand(0.2, 0.4, "cp1t2") + perpY * curvature1,
-    };
-    cp2 = {
-      x: start.x + dx * rand(0.6, 0.8, "cp2t") + perpX * curvature2,
-      y: start.y + dy * rand(0.6, 0.8, "cp2t2") + perpY * curvature2,
-    };
-    attempts++;
+  const steps = Math.max(10, Math.round(dist / 4));
+  const points: Point[] = [start];
 
-    // Check deviation: measure angle from start→cp1 vs start→end
-    if (dist < 5) break; // Very short distances are exempt
-    const toCP1x = cp1.x - start.x, toCP1y = cp1.y - start.y;
-    const toEndx = end.x - start.x, toEndy = end.y - start.y;
-    const dot = toCP1x * toEndx + toCP1y * toEndy;
-    const magCP1 = Math.sqrt(toCP1x * toCP1x + toCP1y * toCP1y);
-    const magEnd = Math.sqrt(toEndx * toEndx + toEndy * toEndy);
-    if (magCP1 < 0.001 || magEnd < 0.001) break;
-    const cosAngle = Math.min(1, Math.max(-1, dot / (magCP1 * magEnd)));
-    const angle = Math.acos(cosAngle);
-    if (angle >= MIN_DEVIATION_RAD) break; // Sufficient deviation
-  } while (attempts < 10);
+  // Drift direction: perpendicular to travel direction, never same as last
+  const perpX = -dy / Math.max(1, dist);
+  const perpY = dx / Math.max(1, dist);
+  let driftSign: number;
+  do { driftSign = Math.random() < 0.5 ? 1 : -1; } while (driftSign === lastDriftDir);
+  lastDriftDir = driftSign;
 
-  // If still too straight after 10 attempts, force minimum perpendicular offset
-  if (attempts >= 10 && dist >= 5) {
-    const forceOffset = dist * 0.05 * (Math.random() < 0.5 ? 1 : -1);
-    cp1.x += perpX * forceOffset / Math.max(1, dist);
-    cp1.y += perpY * forceOffset / Math.max(1, dist);
-  }
+  // Drift magnitude: 0.5-1.5px per 100px of travel
+  const driftRate = rand(0.5, 1.5, "driftRate") / 100;
+  const maxDrift = Math.min(dist * driftRate, 15); // Never exceed 15px total deviation
 
-  const steps = Math.max(8, Math.round(dist / 5));
-  const points: Point[] = [];
-  for (let i = 0; i <= steps; i++) {
+  // Hook magnitude based on distance
+  let hookMag: number;
+  if (dist < 200) hookMag = rand(2, 5, "hookMag");
+  else if (dist < 500) hookMag = rand(4, 8, "hookMag");
+  else hookMag = rand(6, 12, "hookMag");
+  // Ensure no repeat
+  while (Math.abs(hookMag - lastHookMag) < 1) hookMag = rand(2, 12, "hookMag2");
+  lastHookMag = hookMag;
+
+  // Landing offset: 0.5-2px, never same as last
+  let landOff: number;
+  do { landOff = rand(0.5, 2, "landOff"); } while (Math.abs(landOff - lastLandOff) < 0.3);
+  lastLandOff = landOff;
+  const landAngle = rand(0, Math.PI * 2, "landAngle");
+
+  const phase1End = Math.floor(steps * 0.7);
+  const phase2End = Math.floor(steps * 0.9);
+
+  for (let i = 1; i <= steps; i++) {
     const t = i / steps;
-    points.push({
-      x: cubicBezier(t, start.x, cp1.x, cp2.x, end.x),
-      y: cubicBezier(t, start.y, cp1.y, cp2.y, end.y),
-    });
+    // Base straight-line position
+    let x = start.x + dx * t;
+    let y = start.y + dy * t;
+
+    if (i <= phase1End) {
+      // Phase 1: Straight launch with gradual drift
+      const driftProgress = i / phase1End;
+      const driftAmount = maxDrift * driftProgress * driftSign;
+      x += perpX * driftAmount;
+      y += perpY * driftAmount;
+    } else if (i <= phase2End) {
+      // Phase 2: Soft hook correction back toward destination
+      const hookProgress = (i - phase1End) / (phase2End - phase1End);
+      // Drift fades out as hook takes over
+      const remainingDrift = maxDrift * driftSign * (1 - hookProgress);
+      // Hook curves in opposite direction of drift
+      const hookAmount = hookMag * Math.sin(hookProgress * Math.PI / 2) * -driftSign;
+      x += perpX * (remainingDrift + hookAmount);
+      y += perpY * (remainingDrift + hookAmount);
+    } else {
+      // Phase 3: Final landing — straighten out toward target
+      const landProgress = (i - phase2End) / (steps - phase2End);
+      // Any remaining offset fades to zero plus landing offset
+      const finalOffX = Math.cos(landAngle) * landOff * (1 - landProgress * 0.5);
+      const finalOffY = Math.sin(landAngle) * landOff * (1 - landProgress * 0.5);
+      x += finalOffX;
+      y += finalOffY;
+
+      // Micro tremor: 0.3-0.8px, every 3rd-4th step only in phase 3
+      if (i % randInt(3, 4, `p3trem${i}`) === 0) {
+        x += rand(-0.8, 0.8, `p3tremX${i}`);
+        y += rand(-0.8, 0.8, `p3tremY${i}`);
+      }
+    }
+
+    points.push({ x, y });
   }
+
   return points;
 }
 
 type SpeedTier = "slow" | "normal" | "fast";
-const MOUSE_BOOST = 1.1; // +10% speed multiplier
+const MOUSE_BOOST = 1.1;
 const SPEED_RANGES: Record<SpeedTier, [number, number]> = {
   slow: [0.3 * MOUSE_BOOST, 0.8 * MOUSE_BOOST],
   normal: [0.8 * MOUSE_BOOST, 1.5 * MOUSE_BOOST],
@@ -190,46 +218,18 @@ let mouseY = 400;
 async function moveMouse(page: Page, targetX: number, targetY: number, tier: SpeedTier = "normal") {
   const [sMin, sMax] = SPEED_RANGES[tier];
   const cruiseSpeed = Math.min(rand(sMin, sMax, "speed"), 3.0);
-  const path = generateBezierPath({ x: mouseX, y: mouseY }, { x: targetX, y: targetY });
+  const path = generateSoftBracketPath({ x: mouseX, y: mouseY }, { x: targetX, y: targetY });
 
   const accelEnd = Math.floor(path.length * rand(0.2, 0.3, "accelPhase"));
   const decelStart = Math.floor(path.length * (1 - rand(0.2, 0.3, "decelPhase")));
   const startSpeed = rand(0.2 * MOUSE_BOOST, 0.4 * MOUSE_BOOST, "startSpeed");
   const endSpeed = rand(0.3 * MOUSE_BOOST, 0.5 * MOUSE_BOOST, "endSpeed");
 
-  // Mid-path course correction: 10-15% chance of 3-8px deviation around 40-60% mark
-  const hasCourseCorrection = Math.random() < rand(0.10, 0.15, "courseCorr");
-  const correctionStart = Math.floor(path.length * rand(0.4, 0.5, "corrStart"));
-  const correctionPeak = Math.floor(path.length * rand(0.5, 0.6, "corrPeak"));
-  const correctionOffX = hasCourseCorrection ? rand(-8, 8, "corrOffX") : 0;
-  const correctionOffY = hasCourseCorrection ? rand(-8, 8, "corrOffY") : 0;
-
   for (let i = 1; i < path.length; i++) {
-    let ptX = path[i].x;
-    let ptY = path[i].y;
-
-    // 1. Micro tremors: 0.3-0.8px jitter, only every 3rd or 4th step
-    if (i % randInt(3, 4, `tremFreq${i}`) === 0) {
-      ptX += rand(-0.8, 0.8, `tremX${i}`);
-      ptY += rand(-0.8, 0.8, `tremY${i}`);
-    }
-
-    // 3. Mid-path course correction: gradual deviation then correction
-    if (hasCourseCorrection) {
-      if (i >= correctionStart && i <= correctionPeak) {
-        const t = (i - correctionStart) / Math.max(1, correctionPeak - correctionStart);
-        ptX += correctionOffX * t;
-        ptY += correctionOffY * t;
-      } else if (i > correctionPeak) {
-        const remaining = path.length - correctionPeak;
-        const t = 1 - (i - correctionPeak) / Math.max(1, remaining);
-        ptX += correctionOffX * t;
-        ptY += correctionOffY * t;
-      }
-    }
-
-    const prevX = i === 1 ? mouseX : path[i - 1].x;
-    const prevY = i === 1 ? mouseY : path[i - 1].y;
+    const ptX = path[i].x;
+    const ptY = path[i].y;
+    const prevX = path[i - 1].x;
+    const prevY = path[i - 1].y;
     const segDist = Math.sqrt((ptX - prevX) ** 2 + (ptY - prevY) ** 2);
 
     let speed: number;
@@ -240,9 +240,8 @@ async function moveMouse(page: Page, targetX: number, targetY: number, tier: Spe
       const t = (i - decelStart) / (path.length - decelStart);
       speed = cruiseSpeed - (cruiseSpeed - endSpeed) * t;
     } else {
-      // 2. Speed wobble: ±10-15% fluctuation during cruise phase
-      const wobble = 1 + rand(-0.15, 0.15, `wobble${i}`);
-      speed = cruiseSpeed * wobble;
+      // Speed wobble: ±10% during cruise
+      speed = cruiseSpeed * (1 + rand(-0.10, 0.10, `wobble${i}`));
     }
     speed = Math.min(speed, 3.0);
     const delay = Math.max(1, Math.round(segDist / speed));
@@ -251,10 +250,10 @@ async function moveMouse(page: Page, targetX: number, targetY: number, tier: Spe
     await page.mouse.move(px, py);
     await updateCursorPosition(page, px, py);
     if (delay > 1) await page.waitForTimeout(delay);
+    // Track actual final position (includes landing offset from path)
+    mouseX = px;
+    mouseY = py;
   }
-
-  mouseX = targetX;
-  mouseY = targetY;
 }
 
 // ============================================================================
@@ -267,25 +266,21 @@ async function humanDelay(page: Page, min: number, max: number) {
 }
 
 async function humanClick(page: Page, x: number, y: number, tier: SpeedTier = "normal") {
-  // 4. Sub-pixel landing offset: 1-3px, never zero, never same twice
-  const landOffX = randInt(1, 3, "landX") * (Math.random() < 0.5 ? -1 : 1);
-  const landOffY = randInt(1, 3, "landY") * (Math.random() < 0.5 ? -1 : 1);
-
+  // Landing offset now built into path generator (phase 3)
   // 5-10% misclick chance
   if (Math.random() < rand(0.05, 0.10, "misclick")) {
     const offX = x + randInt(-15, 15, "misX");
     const offY = y + randInt(-15, 15, "misY");
     await moveMouse(page, offX, offY, tier);
     await page.mouse.click(offX, offY);
-    await humanDelay(page, 50, 150); // reaction time
-    await humanDelay(page, 200, 600); // confused pause
-    // Correct — with landing offset
+    await humanDelay(page, 50, 150);
+    await humanDelay(page, 200, 600);
     await moveMouse(page, x, y, tier);
-    await page.mouse.click(x + landOffX, y + landOffY);
+    await page.mouse.click(Math.round(mouseX), Math.round(mouseY));
   } else {
     await moveMouse(page, x, y, tier);
-    await humanDelay(page, 50, 150); // minimum reaction before click
-    await page.mouse.click(x + landOffX, y + landOffY);
+    await humanDelay(page, 50, 150);
+    await page.mouse.click(Math.round(mouseX), Math.round(mouseY));
   }
 }
 
