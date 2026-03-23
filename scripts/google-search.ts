@@ -84,7 +84,8 @@ async function googleSearch(query: string): Promise<SearchResult[]> {
   const url = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(query)}&key=${GOOGLE_KEY}&cx=${CSE_ID}&num=10`;
   const res = await fetch(url);
   if (!res.ok) {
-    const errText = await res.text().catch(() => "");
+    let errText = "";
+    try { errText = await res.text(); } catch { /* ignore */ }
     throw new Error(`Google API ${res.status}: ${errText.substring(0, 200)}`);
   }
   const data = await res.json();
@@ -230,7 +231,7 @@ async function main() {
       } catch {
         errors++;
         console.log(`[${ts()}]   Error (${p.business_name}): ${errMsg}`);
-        await supabase.from("pineyweb_prospects").update({ facebook_found: null }).eq("id", p.id).catch(() => {});
+        try { await supabase.from("pineyweb_prospects").update({ facebook_found: null }).eq("id", p.id); } catch { /* non-blocking */ }
       }
     }
 
