@@ -643,14 +643,28 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
     }
 
     if (isMatch) {
-      // Step 28: Click at random point within link
+      // Navigate to matched candidate's page
+      const matchUrl = candidates[i].href;
+      console.log(`[${ts()}]   Navigating to matched page: ${matchUrl}`);
+      await checkForPopup(page);
+      const urlBefore = page.url();
+
       if (box) {
+        // Click the link and wait for navigation
         await humanClick(page, box.x + randInt(5, Math.max(6, box.width - 5), "matchClickX"), box.y + randInt(3, Math.max(4, box.height - 3), "matchClickY"), "normal");
+        // Wait for URL to change (Facebook JS navigation)
+        try {
+          await page.waitForURL((url) => url.toString() !== urlBefore, { timeout: 8000 });
+        } catch {
+          // Click didn't navigate — fall back to direct goto
+          console.log(`[${ts()}]   Click didn't navigate — using direct goto`);
+          await page.goto(matchUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
+        }
       } else {
-        await checkForPopup(page);
-        await page.goto(candidates[i].href, { waitUntil: "domcontentloaded", timeout: 15000 });
+        await page.goto(matchUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
       }
 
+      console.log(`[${ts()}]   On page: ${page.url()}`);
       // Step 37: Page load pause — mouse stationary
       await humanDelay(page, 800, 2000);
       // Step 38: Mouse stationary while eyes read
@@ -689,8 +703,10 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
   for (let i = toScan; i < candidates.length; i++) {
     if (fuzzyMatch(candidates[i].text, matchName, city)) {
       console.log(`[${ts()}]   Matched: "${candidates[i].text}"`);
+      console.log(`[${ts()}]   Navigating to matched page: ${candidates[i].href}`);
       await checkForPopup(page);
       await page.goto(candidates[i].href, { waitUntil: "domcontentloaded", timeout: 15000 });
+      console.log(`[${ts()}]   On page: ${page.url()}`);
       await humanDelay(page, 800, 2000);
       await checkForPopup(page);
       if (isRedirectedToPersonalProfile(page.url())) return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
