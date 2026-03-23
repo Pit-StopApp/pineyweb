@@ -453,13 +453,16 @@ function sanitizePageText(text: string): string {
     .replace(/MobileEmail/gi, " ").replace(/EmailEmail/gi, " ");
 }
 
+const EMAIL_REGEX = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,6}(?=[^a-zA-Z]|$)/g;
+const EMAIL_BLACKLIST = /example|sentry|domain|@facebook|@meta|@fb\.com|noreply|no-reply|test@|@test\./i;
+
 function extractCleanEmail(text: string): string | null {
-  // Match email with TLD capped at 2-6 chars, followed by non-alpha or end-of-string
-  const regex = /[a-zA-Z][a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}(?=[^a-zA-Z]|$)/g;
-  const matches = text.match(regex);
+  const matches = text.match(EMAIL_REGEX);
   if (!matches) return null;
   for (const email of matches) {
-    if (!email.includes("@facebook.com") && !email.includes("@fb.com") && !email.includes("@sentry") && email.length < 100) return email;
+    if (email.length > 100) continue;
+    if (EMAIL_BLACKLIST.test(email)) continue;
+    return email;
   }
   return null;
 }
@@ -581,41 +584,59 @@ async function gazeAtBox(page: Page, box: { x: number; y: number; width: number;
 // ============================================================================
 
 async function extractEmailFromPage(page: Page): Promise<{ email: string | null; website: string | null }> {
+  // 10 second hard timeout for entire extraction
+  const extractionTimer = new Promise<{ email: null; website: null }>((resolve) =>
+    setTimeout(() => { console.log(`[${ts()}]   Email extraction timeout (10s)`); resolve({ email: null, website: null }); }, 10000)
+  );
+  return Promise.race([extractEmailInner(page), extractionTimer]);
+}
+
+async function extractEmailInner(page: Page): Promise<{ email: string | null; website: string | null }> {
   try {
     if (isRedirectedToPersonalProfile(page.url())) return { email: null, website: null };
 
-    const rawText = await page.textContent("body") || "";
-    const mainText = sanitizePageText(rawText);
-    const website = extractWebsiteUrl(mainText);
+    // === FAST BROAD TEXT SCAN via page.evaluate() — first attempt ===
+    const scanResult = await page.evaluate(() => {
+      const allText = document.body?.innerText || "";
+      return allText;
+    }).catch(() => "");
 
-    const mainEmail = extractCleanEmail(mainText);
-    if (mainEmail) return { email: mainEmail, website };
+    const cleanedText = sanitizePageText(scanResult);
+    const website = extractWebsiteUrl(cleanedText);
+    const broadEmail = extractCleanEmail(cleanedText);
+    if (broadEmail) {
+      console.log(`[${ts()}]   Email found via broad text scan`);
+      return { email: broadEmail, website };
+    }
 
-    // Check mailto links
+    // === FALLBACK: Check mailto links ===
     const mailtoLinks = await page.locator('a[href^="mailto:"]').all();
     for (const link of mailtoLinks) {
       const href = await link.getAttribute("href").catch(() => null);
-      if (href) { const email = extractCleanEmail(href.replace("mailto:", "").split("?")[0]); if (email) return { email, website }; }
+      if (href) {
+        const email = extractCleanEmail(href.replace("mailto:", "").split("?")[0]);
+        if (email) { console.log(`[${ts()}]   Email found via mailto link`); return { email, website }; }
+      }
     }
 
+    // === FALLBACK: Navigate to Contact/About page and scan there ===
     const currentUrl = page.url();
 
     // Profile.php pages: scroll to load lazy content
     if (currentUrl.includes("profile.php?id=")) {
-      for (let s = 0; s < 3; s++) {
+      for (let s = 0; s < 2; s++) {
         await scrollWithInertia(page, randInt(400, 600, "profileScroll"));
-        await humanDelay(page, 2000, 3500);
-        const scrolledText = sanitizePageText(await page.textContent("body") || "");
+        await humanDelay(page, 1500, 2500);
+        const scrolledText = sanitizePageText(await page.evaluate(() => document.body?.innerText || "").catch(() => ""));
         const scrolledEmail = extractCleanEmail(scrolledText);
         if (scrolledEmail) return { email: scrolledEmail, website: website || extractWebsiteUrl(scrolledText) };
       }
       return { email: null, website };
     }
 
-    // Step 42-44: Navigate to Contact/About tab
-    // Cursor-as-eyes: gaze at nav tab area while looking for Contact/About
+    // Navigate to Contact/About tab
     await gazeAt(page, 'a[href*="/about"], a[href*="contact"]');
-    await humanDelay(page, 300, 600);
+    await humanDelay(page, 200, 500);
 
     const aboutTab = page.locator('a[href*="/about"]').first();
     const useAboutTab = Math.random() < 0.3 && await aboutTab.isVisible().catch(() => false);
@@ -623,36 +644,30 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
     await checkForPopup(page);
     if (useAboutTab) {
       await clickElement(page, 'a[href*="/about"]', "slow");
-      await humanDelay(page, 500, 1500);
+      await humanDelay(page, 400, 1000);
     } else {
       const contactUrl = currentUrl.replace(/\/$/, "") + "/directory_contact_info";
-      await humanDelay(page, 1200, 2500);
-      await page.goto(contactUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
+      await humanDelay(page, 800, 1500);
+      await page.goto(contactUrl, { waitUntil: "domcontentloaded", timeout: 10000 });
     }
 
-    // Cursor-as-eyes: gaze at contact content area while reading
+    // Broad text scan on contact page
     await gazeAt(page, '[role="main"]');
-    await humanDelay(page, 2000, 4000);
+    await humanDelay(page, 1000, 2000);
 
     if (isRedirectedToPersonalProfile(page.url())) return { email: null, website };
 
-    const contactText = sanitizePageText(await page.textContent("body") || "");
+    const contactText = sanitizePageText(await page.evaluate(() => document.body?.innerText || "").catch(() => ""));
     const contactWebsite = website || extractWebsiteUrl(contactText);
     const contactEmail = extractCleanEmail(contactText);
-    if (contactEmail) return { email: contactEmail, website: contactWebsite };
+    if (contactEmail) { console.log(`[${ts()}]   Email found on contact page`); return { email: contactEmail, website: contactWebsite }; }
 
-    // Not visible — scroll down, gaze at new content, scan again (max 2 attempts)
-    for (let attempt = 0; attempt < 2; attempt++) {
-      await scrollWithInertia(page, randInt(200, 400, "contactScroll"));
-      await gazeAt(page, '[role="main"]');
-      await humanDelay(page, 1500, 3000);
-      const scrolledText = sanitizePageText(await page.textContent("body") || "");
-      const email = extractCleanEmail(scrolledText);
-      if (email) return { email, website: contactWebsite || extractWebsiteUrl(scrolledText) };
-    }
-
-    // Step 45 end: No email found — linger, mouse stationary
-    await humanDelay(page, 2000, 4000);
+    // One scroll attempt on contact page
+    await scrollWithInertia(page, randInt(200, 400, "contactScroll"));
+    await humanDelay(page, 1000, 2000);
+    const scrolledContact = sanitizePageText(await page.evaluate(() => document.body?.innerText || "").catch(() => ""));
+    const scrolledEmail = extractCleanEmail(scrolledContact);
+    if (scrolledEmail) return { email: scrolledEmail, website: contactWebsite || extractWebsiteUrl(scrolledContact) };
 
     return { email: null, website: contactWebsite };
   } catch (err) {
