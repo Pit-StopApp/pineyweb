@@ -661,7 +661,9 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
   }
 }
 
-async function collectCandidates(page: Page): Promise<{ text: string; href: string }[]> {
+async function collectVisibleCandidates(page: Page): Promise<{ text: string; href: string }[]> {
+  // Only collect candidates whose bounding box is within the current viewport
+  const vpHeight = await page.evaluate(() => window.innerHeight);
   const allLinks = await page.locator("a[href]").all();
   const candidates: { text: string; href: string }[] = [];
   for (const link of allLinks) {
@@ -672,11 +674,25 @@ async function collectCandidates(page: Page): Promise<{ text: string; href: stri
     if (href.includes("/search/") || href.includes("/login") || href.includes("/help") || href.includes("/policies")) continue;
     const trimmed = text.trim();
     if (trimmed.length < 3) continue;
-    // Filter false positive notification/UI text
     if (/Unread|Mark as read|followed you|reacted to|tagged in|likes your/i.test(trimmed)) continue;
+    // Only include if element is within viewport
+    const box = await link.boundingBox().catch(() => null);
+    if (!box || box.y + box.height < 0 || box.y > vpHeight) continue;
     candidates.push({ text: trimmed, href });
   }
   return candidates;
+}
+
+async function ensureInViewport(page: Page, selector: string): Promise<boolean> {
+  const el = page.locator(selector).first();
+  const box = await el.boundingBox().catch(() => null);
+  if (!box) return false;
+  const vpHeight = await page.evaluate(() => window.innerHeight);
+  if (box.y >= 0 && box.y + box.height <= vpHeight) return true;
+  // Scroll to bring element into view
+  await el.scrollIntoViewIfNeeded().catch(() => {});
+  await humanDelay(page, 300, 600);
+  return true;
 }
 
 type SearchResult = {
@@ -689,18 +705,23 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
   // Step 24: Random pause while results load
   await humanDelay(page, 600, 1500);
 
-  // Scan all candidates — cursor moves near each one as eyes read it
-  const toScan = Math.min(candidates.length, randInt(1, 4, "scanCount"));
-  for (let i = 0; i < toScan; i++) {
+  // Scan candidates — cursor moves near each visible one before evaluating
+  for (let i = 0; i < candidates.length; i++) {
     const { text } = candidates[i];
 
-    // Move cursor near this result (cursor-as-eyes) before evaluating
-    const linkEl = page.locator(`a:has-text("${text.substring(0, 30)}")`).first();
+    // Ensure element is in viewport before moving cursor to it
+    const safeSelector = `a:has-text("${text.substring(0, 30).replace(/"/g, '\\"')}")`;
+    const linkEl = page.locator(safeSelector).first();
     const box = await linkEl.boundingBox().catch(() => null);
-    if (box) {
-      await gazeAtBox(page, box);
-      await humanDelay(page, 300, 800); // scan/read pause
-    }
+    if (!box) continue;
+
+    // Check if in viewport — if not, skip (don't scroll to it from results)
+    const vpHeight = await page.evaluate(() => window.innerHeight);
+    if (box.y + box.height < 0 || box.y > vpHeight) continue;
+
+    // Cursor-as-eyes: gaze near element
+    await gazeAtBox(page, box);
+    await humanDelay(page, 300, 800);
 
     const isMatch = fuzzyMatch(text, matchName, city);
     // Strict city check: reject if candidate text contains a different city
@@ -778,44 +799,6 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
     }
   }
 
-  // Check remaining candidates without hovering
-  for (let i = toScan; i < candidates.length; i++) {
-    // Strict city check on remaining candidates
-    const candLower = candidates[i].text.toLowerCase();
-    if (candLower.includes(" - ") && !candLower.includes(city.toLowerCase())) continue;
-    if (fuzzyMatch(candidates[i].text, matchName, city)) {
-      console.log(`[${ts()}]   Matched: "${candidates[i].text}"`);
-      console.log(`[${ts()}]   Navigating to matched page: ${candidates[i].href}`);
-      await checkForPopup(page);
-      await page.goto(candidates[i].href, { waitUntil: "domcontentloaded", timeout: 15000 });
-      const landedUrl2 = page.url();
-      console.log(`[${ts()}]   On page: ${landedUrl2}`);
-
-      if (isWrongPage(landedUrl2) || isRedirectedToPersonalProfile(landedUrl2)) {
-        console.log(`[${ts()}]   Wrong page after navigation — skipping prospect`);
-        return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
-      }
-
-      await humanDelay(page, 800, 2000);
-      await checkForPopup(page);
-
-      // Cursor-as-eyes: gaze at page title
-      await gazeAt(page, 'h1, [role="heading"]');
-      await humanDelay(page, 500, 1200);
-
-      const phoneOk = await confirmPhoneMatch(page, phone);
-      const matchType: "exact" | "fuzzy" = fuzzyClean(candidates[i].text, city) === fuzzyClean(matchName, city) ? "exact" : "fuzzy";
-      const { inactive, reason: inactiveReason } = await checkBusinessInactive(page);
-      if (inactive) return { url: page.url(), email: null, website: null, inactive: true, inactiveReason, matchType, phoneConfirmed: phoneOk, matchedPageName: candidates[i].text };
-
-      await scrollWithInertia(page, randInt(300, 600, "lateBizScroll"));
-      await gazeAt(page, '[role="main"]');
-      await humanDelay(page, 1000, 2000);
-      const { email, website } = await extractEmailFromPage(page);
-      return { url: page.url(), email, website, inactive: false, inactiveReason: null, matchType, phoneConfirmed: phoneOk, matchedPageName: candidates[i].text };
-    }
-  }
-
   return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
 }
 
@@ -841,7 +824,7 @@ async function searchFacebook(page: Page, businessName: string, city: string, ph
 
   // Scan visible results BEFORE any scrolling
   await humanDelay(page, 1500, 2500);
-  let candidates = await collectCandidates(page);
+  let candidates = await collectVisibleCandidates(page);
   console.log(`[${ts()}]   Found ${candidates.length} visible candidate links`);
 
   if (candidates.length > 0) {
@@ -852,7 +835,7 @@ async function searchFacebook(page: Page, businessName: string, city: string, ph
   // No match in visible results — scroll down and collect more
   await scrollWithInertia(page, randInt(300, 500, "searchScroll"));
   await humanDelay(page, 1500, 2500);
-  const moreCandidates = await collectCandidates(page);
+  const moreCandidates = await collectVisibleCandidates(page);
   // Only check newly appeared candidates
   const seenHrefs = new Set(candidates.map(c => c.href));
   const newCandidates = moreCandidates.filter(c => !seenHrefs.has(c.href));
@@ -887,7 +870,7 @@ async function searchFacebook(page: Page, businessName: string, city: string, ph
     await scrollWithInertia(page, randInt(100, 300, "retryScroll"));
     await humanDelay(page, 2000, 3500);
 
-    const retryCandidates = await collectCandidates(page);
+    const retryCandidates = await collectVisibleCandidates(page);
     console.log(`[${ts()}]   Retry found ${retryCandidates.length} candidate page links`);
     if (retryCandidates.length > 0) {
       const retryResult = await tryMatchCandidates(page, retryCandidates, simplified, city, phone);
