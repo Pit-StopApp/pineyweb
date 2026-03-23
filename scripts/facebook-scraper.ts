@@ -28,7 +28,7 @@
  * - Scroll easing with micro-follow (5-15px) and overshoot correction (15-20%)
  * - Autocomplete detection (85-90% ignore, 10-15% glance)
  * - Misclick simulation (5-10% chance on any click)
- * - Search via / shortcut + humanType (character-by-character, no URL navigation)
+ * - Search via direct URL navigation (facebook.com/search/pages/?q=...)
  * - Search retry with name simplification on no results
  * - Break system: every 15-30 prospects, 3-7min, feed surf (60%) or idle (40%)
  * - Daily email cap (200) with graceful mid-prospect completion
@@ -245,64 +245,7 @@ async function scrollWithInertia(page: Page, amount: number) {
   }
 }
 
-async function humanType(page: Page, text: string) {
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    // Character complexity affects speed: special chars/numbers are slower
-    const isComplex = /[^a-zA-Z\s]/.test(ch);
-    const baseDelay = isComplex ? randInt(120, 200, "typeDelay") : randInt(70, 140, "typeDelay");
-    // WPM variation: 55-75 wpm → ~160-220ms per character average
-    await page.keyboard.type(ch, { delay: baseDelay });
-
-    // 10-15% single typo, 2-4% double typo (not on last 2 chars)
-    if (i < text.length - 2) {
-      const typoRoll = Math.random();
-      if (typoRoll < rand(0.02, 0.04, "doubleTypo")) {
-        // Double typo
-        const wrong = "abcdefghijklmnopqrstuvwxyz";
-        await page.keyboard.type(wrong[Math.floor(Math.random() * 26)], { delay: randInt(50, 100, "typo1") });
-        await page.keyboard.type(wrong[Math.floor(Math.random() * 26)], { delay: randInt(50, 100, "typo2") });
-        await humanDelay(page, 50, 150); // notice delay
-        await page.keyboard.press("Backspace");
-        await page.waitForTimeout(randInt(60, 90, "bkspDel1"));
-        await page.keyboard.press("Backspace");
-        await humanDelay(page, 80, 200);
-      } else if (typoRoll < rand(0.10, 0.15, "singleTypo")) {
-        // Single typo
-        const wrong = "abcdefghijklmnopqrstuvwxyz";
-        await page.keyboard.type(wrong[Math.floor(Math.random() * 26)], { delay: randInt(50, 100, "typo") });
-        await humanDelay(page, 50, 150);
-        await page.keyboard.press("Backspace");
-        await humanDelay(page, 80, 200);
-      }
-    }
-  }
-}
-
-async function clearSearchBar(page: Page) {
-  // Clear with backspace — sometimes held, sometimes tapped
-  const method = Math.random();
-  if (method < 0.4) {
-    // Select all + delete
-    await page.keyboard.down("Meta");
-    await page.keyboard.press("a");
-    await page.keyboard.up("Meta");
-    await humanDelay(page, 50, 150);
-    await page.keyboard.press("Backspace");
-  } else {
-    // Repeated backspace — 60-90ms per character, never same delay twice
-    for (let i = 0; i < 80; i++) {
-      await page.keyboard.press("Backspace");
-      await page.waitForTimeout(randInt(60, 90, "clearBksp"));
-      const val = await page.evaluate(() => {
-        const el = document.activeElement as HTMLInputElement;
-        return el?.value?.length ?? el?.textContent?.length ?? 0;
-      });
-      if (val === 0) break;
-    }
-  }
-  await humanDelay(page, 50, 150);
-}
+// humanType and clearSearchBar removed — search uses direct URL navigation
 
 // ============================================================================
 // SECTION 4: POPUP / LOGIN WALL DETECTION
@@ -627,8 +570,11 @@ async function collectCandidates(page: Page): Promise<{ text: string; href: stri
     if (!href || !text) continue;
     if (!href.includes("facebook.com/")) continue;
     if (href.includes("/search/") || href.includes("/login") || href.includes("/help") || href.includes("/policies")) continue;
-    if (text.trim().length < 3) continue;
-    candidates.push({ text: text.trim(), href });
+    const trimmed = text.trim();
+    if (trimmed.length < 3) continue;
+    // Filter false positive notification/UI text
+    if (/Unread|Mark as read|followed you|reacted to|tagged in|likes your/i.test(trimmed)) continue;
+    candidates.push({ text: trimmed, href });
   }
   return candidates;
 }
@@ -726,47 +672,19 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
   return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
 }
 
-// Refocus search bar using / keyboard shortcut (step 63 alternative)
-async function refocusSearchBar(page: Page) {
-  await humanDelay(page, 50, 150);
-  await page.keyboard.press("/");
-  await humanDelay(page, 300, 600);
-}
+// refocusSearchBar removed — search uses direct URL navigation
 
 async function searchFacebook(page: Page, businessName: string, city: string, phone: string | null): Promise<SearchResult> {
   const humanQuery = humanizeQuery(businessName, city);
+  const searchUrl = `https://www.facebook.com/search/pages/?q=${encodeURIComponent(humanQuery)}`;
 
-  // Step 5-13: Type search character by character
+  // Navigate directly to search results URL
   await checkForPopup(page);
   await humanDelay(page, 1200, 2500);
   console.log(`[${ts()}]   Searching Facebook: "${humanQuery}"`);
+  await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
 
-  // Navigate to Facebook home if not already there (e.g. after visiting a business page)
-  if (!page.url().includes("facebook.com/search") && !page.url().match(/facebook\.com\/?$/)) {
-    await page.goto("https://www.facebook.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
-    await humanDelay(page, 1500, 3000);
-    await injectCursorOverlay(page);
-  }
-
-  // Use / shortcut to focus search bar, then type
-  await refocusSearchBar(page);
-  await clearSearchBar(page);
-  await humanDelay(page, 300, 900); // Step 7: pause as if recalling name
-  await humanType(page, humanQuery);
-
-  // Step 9: Autocomplete handling — 85-90% ignore
-  await humanDelay(page, 200, 500);
-  if (Math.random() > rand(0.85, 0.90, "autocomplete")) {
-    await humanDelay(page, 300, 600); // glance at suggestions
-  }
-
-  // Step 11-13: Re-read, finger travel, Enter
-  await humanDelay(page, 400, 1100);
-  await humanDelay(page, 50, 150);
-  await checkForPopup(page);
-  await page.keyboard.press("Enter");
-
-  // Wait for results to load
+  // Wait for results to load — mouse stationary while page renders
   await humanDelay(page, 2000, 4000);
   await scrollWithInertia(page, randInt(100, 300, "searchScroll"));
 
@@ -791,19 +709,14 @@ async function searchFacebook(page: Page, businessName: string, city: string, ph
   const simplified = meaningful.slice(0, Math.min(3, meaningful.length)).join(" ");
 
   if (meaningful.length >= 2) {
-    // Step 14: Stare at empty results
+    // Pause as if scanning empty results
     await humanDelay(page, 1000, 2000);
     console.log(`[${ts()}]   No match. Retrying with: "${simplified}"`);
 
-    // Steps 15-22: Retry with simplified name — type character by character
-    await refocusSearchBar(page);
-    await clearSearchBar(page);
-    await humanDelay(page, 300, 800); // Step 18: thinking how to rephrase
-    await humanType(page, simplified);
-    await humanDelay(page, 400, 1100); // Step 20: re-read
-    await humanDelay(page, 50, 150); // Step 21: finger to Enter
+    // Navigate directly to retry search URL
+    const retryUrl = `https://www.facebook.com/search/pages/?q=${encodeURIComponent(simplified)}`;
     await checkForPopup(page);
-    await page.keyboard.press("Enter");
+    await page.goto(retryUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
     await humanDelay(page, 2000, 4000);
     await scrollWithInertia(page, randInt(100, 300, "retryScroll"));
     await humanDelay(page, 2000, 3500);
@@ -1126,6 +1039,11 @@ async function main() {
       tested++;
       if (tested % 10 === 0) logProgress();
       if (tested % 25 === 0) saveReport();
+    }
+
+    // Pause between prospects — glancing away before next search
+    if (i < prospects.length - 1) {
+      await humanDelay(page, 2000, 5000);
     }
   }
 
