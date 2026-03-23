@@ -549,6 +549,26 @@ function shuffleArray<T>(arr: T[]): T[] {
   const s = [...arr]; for (let i = s.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [s[i], s[j]] = [s[j], s[i]]; } return s;
 }
 
+// --- Cursor-as-eyes: move cursor near element before evaluating it ---
+async function gazeAt(page: Page, selector: string): Promise<boolean> {
+  const el = page.locator(selector).first();
+  const box = await el.boundingBox().catch(() => null);
+  if (!box) return false;
+  // Offset 5-15px from element center, random direction
+  const offX = randInt(5, 15, "gazeOffX") * (Math.random() < 0.5 ? -1 : 1);
+  const offY = randInt(5, 15, "gazeOffY") * (Math.random() < 0.5 ? -1 : 1);
+  const cx = box.x + box.width / 2 + offX;
+  const cy = box.y + box.height / 2 + offY;
+  await moveMouse(page, cx, cy, "slow"); // deliberate reading speed
+  return true;
+}
+
+async function gazeAtBox(page: Page, box: { x: number; y: number; width: number; height: number }) {
+  const offX = randInt(5, 15, "gazeBoxOffX") * (Math.random() < 0.5 ? -1 : 1);
+  const offY = randInt(5, 15, "gazeBoxOffY") * (Math.random() < 0.5 ? -1 : 1);
+  await moveMouse(page, box.x + box.width / 2 + offX, box.y + box.height / 2 + offY, "slow");
+}
+
 // ============================================================================
 // SECTION 7: FACEBOOK INTERACTION LAYER (spec-compliant)
 // ============================================================================
@@ -586,6 +606,10 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
     }
 
     // Step 42-44: Navigate to Contact/About tab
+    // Cursor-as-eyes: gaze at nav tab area while looking for Contact/About
+    await gazeAt(page, 'a[href*="/about"], a[href*="contact"]');
+    await humanDelay(page, 300, 600);
+
     const aboutTab = page.locator('a[href*="/about"]').first();
     const useAboutTab = Math.random() < 0.3 && await aboutTab.isVisible().catch(() => false);
 
@@ -599,7 +623,8 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
       await page.goto(contactUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
     }
 
-    // Step 45: Single continuous read (2-4s) — mouse stationary while reading
+    // Cursor-as-eyes: gaze at contact content area while reading
+    await gazeAt(page, '[role="main"]');
     await humanDelay(page, 2000, 4000);
 
     if (isRedirectedToPersonalProfile(page.url())) return { email: null, website };
@@ -609,9 +634,10 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
     const contactEmail = extractCleanEmail(contactText);
     if (contactEmail) return { email: contactEmail, website: contactWebsite };
 
-    // Not visible — scroll down and scan again (max 2 attempts)
+    // Not visible — scroll down, gaze at new content, scan again (max 2 attempts)
     for (let attempt = 0; attempt < 2; attempt++) {
       await scrollWithInertia(page, randInt(200, 400, "contactScroll"));
+      await gazeAt(page, '[role="main"]');
       await humanDelay(page, 1500, 3000);
       const scrolledText = sanitizePageText(await page.textContent("body") || "");
       const email = extractCleanEmail(scrolledText);
@@ -656,20 +682,22 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
   // Step 24: Random pause while results load
   await humanDelay(page, 600, 1500);
 
-  // Step 25-27: Mouse drifts over results, scanning 1-4 before clicking
+  // Scan all candidates — cursor moves near each one as eyes read it
   const toScan = Math.min(candidates.length, randInt(1, 4, "scanCount"));
   for (let i = 0; i < toScan; i++) {
     const { text } = candidates[i];
-    const isMatch = fuzzyMatch(text, matchName, city);
-    console.log(`[${ts()}]   Candidate: "${text}" → ${isMatch ? "MATCH" : "no match"}`);
 
-    // Hover over each result briefly
+    // Move cursor near this result (cursor-as-eyes) before evaluating
     const linkEl = page.locator(`a:has-text("${text.substring(0, 30)}")`).first();
     const box = await linkEl.boundingBox().catch(() => null);
     if (box) {
-      await moveMouse(page, box.x + randInt(10, Math.max(11, box.width - 10), "hoverX"), box.y + randInt(3, Math.max(4, box.height - 3), "hoverY"), "normal");
-      await humanDelay(page, 200, 800);
+      await gazeAtBox(page, box);
+      await humanDelay(page, 300, 800); // scan/read pause
     }
+
+    const isMatch = fuzzyMatch(text, matchName, city);
+    console.log(`[${ts()}]   Candidate: "${text}" → ${isMatch ? "MATCH" : "no match"}`);
+
 
     if (isMatch) {
       // Navigate to matched candidate's page
@@ -694,19 +722,21 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
       }
 
       console.log(`[${ts()}]   On page: ${page.url()}`);
-      // Step 37: Page load pause — mouse stationary
+      // Step 37: Page load pause
       await humanDelay(page, 800, 2000);
-      // Step 38: Mouse stationary while eyes read
-      await humanDelay(page, 300, 900);
 
       await checkForPopup(page);
-
       if (isRedirectedToPersonalProfile(page.url())) return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
+
+      // Cursor-as-eyes: gaze at page title/name
+      await gazeAt(page, 'h1, [role="heading"]');
+      await humanDelay(page, 500, 1200);
 
       // Step 40: Scroll toward Contact/About section
       await scrollWithInertia(page, randInt(300, 600, "bizScroll"));
-      // Step 41: Random pause scanning page — mouse stationary while eyes read
-      await humanDelay(page, 1000, 3000);
+      // Step 41: Cursor gazes at content area while scanning
+      await gazeAt(page, '[role="main"]');
+      await humanDelay(page, 1000, 2500);
 
       const phoneOk = await confirmPhoneMatch(page, phone);
       console.log(`[${ts()}]   ${phoneOk ? "Phone confirmed" : "Phone mismatch but name/city match, proceeding"}`);
@@ -740,12 +770,17 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
       await checkForPopup(page);
       if (isRedirectedToPersonalProfile(page.url())) return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
 
+      // Cursor-as-eyes: gaze at page title
+      await gazeAt(page, 'h1, [role="heading"]');
+      await humanDelay(page, 500, 1200);
+
       const phoneOk = await confirmPhoneMatch(page, phone);
       const matchType: "exact" | "fuzzy" = fuzzyClean(candidates[i].text, city) === fuzzyClean(matchName, city) ? "exact" : "fuzzy";
       const { inactive, reason: inactiveReason } = await checkBusinessInactive(page);
       if (inactive) return { url: page.url(), email: null, website: null, inactive: true, inactiveReason, matchType, phoneConfirmed: phoneOk, matchedPageName: candidates[i].text };
 
       await scrollWithInertia(page, randInt(300, 600, "lateBizScroll"));
+      await gazeAt(page, '[role="main"]');
       await humanDelay(page, 1000, 2000);
       const { email, website } = await extractEmailFromPage(page);
       return { url: page.url(), email, website, inactive: false, inactiveReason: null, matchType, phoneConfirmed: phoneOk, matchedPageName: candidates[i].text };
@@ -769,20 +804,34 @@ async function searchFacebook(page: Page, businessName: string, city: string, ph
 
   // Wait for results to load — mouse stationary while page renders
   await humanDelay(page, 2000, 4000);
-  await scrollWithInertia(page, randInt(100, 300, "searchScroll"));
 
   if (page.url().includes("/login")) {
     console.log(`[${ts()}]   Session expired — redirected to login`);
     return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
   }
 
-  await humanDelay(page, 2000, 3500);
-  const candidates = await collectCandidates(page);
-  console.log(`[${ts()}]   Found ${candidates.length} candidate page links`);
+  // Scan visible results BEFORE any scrolling
+  await humanDelay(page, 1500, 2500);
+  let candidates = await collectCandidates(page);
+  console.log(`[${ts()}]   Found ${candidates.length} visible candidate links`);
 
   if (candidates.length > 0) {
     const result = await tryMatchCandidates(page, candidates, businessName, city, phone);
     if (result.url) return result;
+  }
+
+  // No match in visible results — scroll down and collect more
+  await scrollWithInertia(page, randInt(300, 500, "searchScroll"));
+  await humanDelay(page, 1500, 2500);
+  const moreCandidates = await collectCandidates(page);
+  // Only check newly appeared candidates
+  const seenHrefs = new Set(candidates.map(c => c.href));
+  const newCandidates = moreCandidates.filter(c => !seenHrefs.has(c.href));
+  if (newCandidates.length > 0) {
+    console.log(`[${ts()}]   Found ${newCandidates.length} additional candidates after scroll`);
+    const scrollResult = await tryMatchCandidates(page, newCandidates, businessName, city, phone);
+    if (scrollResult.url) return scrollResult;
+    candidates = [...candidates, ...newCandidates];
   }
 
   // Steps 14-23: Retry with simplified name
