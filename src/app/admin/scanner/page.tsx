@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
+import AdminNav from "@/components/AdminNav";
 
 interface Result { place_id: string; business_name: string; address: string; city: string; phone: string | null; email: string | null; email_source: string | null; rating: number | null; review_count: number | null; priority_tier: 1 | 2; }
 interface Stats { raw: number; chains_removed: number; has_website: number; zero_reviews_skipped: number; already_in_crm: number; new_prospects: number; tier_1: number; tier_2: number; emails_found: number; }
@@ -135,23 +136,7 @@ export default function ScannerPage() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: "#fef9f1", fontFamily: "'Lora', serif" }}>
-      {/* Nav */}
-      <header className="sticky top-0 w-full z-50 backdrop-blur-xl" style={{ backgroundColor: "rgba(254,249,241,0.8)", boxShadow: "0 12px 40px rgba(48,20,0,0.06)" }}>
-        <div className="flex justify-between items-center px-8 py-4 max-w-screen-2xl mx-auto">
-          <Link href="/dashboard" className="text-2xl font-bold tracking-tighter" style={{ color: "#316342" }}>Piney Web Co.</Link>
-          <nav className="hidden md:flex items-center gap-8 text-sm">
-            <Link href="/dashboard" style={{ color: "#414942" }}>Dashboard</Link>
-            <Link href="/admin/clients" style={{ color: "#414942" }}>Clients</Link>
-            <span className="font-semibold pb-1" style={{ color: "#316342", borderBottom: "2px solid #316342" }}>Scanner</span>
-            <Link href="/admin/prospects" style={{ color: "#414942" }}>Prospects</Link>
-            <Link href="/admin/queue" style={{ color: "#414942" }}>Queue</Link>
-          </nav>
-          <div className="flex items-center gap-6">
-            <span className="text-sm italic" style={{ color: "#414942" }}>{adminName}</span>
-            <button onClick={handleLogout} className="px-5 py-2 rounded-md font-medium text-white text-sm" style={{ backgroundColor: "#316342" }}>Logout</button>
-          </div>
-        </div>
-      </header>
+      <AdminNav activePage="Scanner" adminName={adminName} onLogout={handleLogout} />
 
       <main className="flex-grow max-w-screen-xl mx-auto w-full px-8 py-16">
         {/* Header */}

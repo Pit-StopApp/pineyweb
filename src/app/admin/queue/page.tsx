@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
+import AdminNav from "@/components/AdminNav";
 
 interface QueueItem { id: string; city: string; distance_from_longview_miles: number; status: string; prospects_found: number; emails_found: number; emails_sent: number; last_scanned_at: string | null; population: number | null; }
 
@@ -18,6 +19,7 @@ export default function QueuePage() {
   const [isRunning, setIsRunning] = useState(false);
   const [runProgress, setRunProgress] = useState("");
   const [currentCity, setCurrentCity] = useState("");
+  const [adminName, setAdminName] = useState("Admin");
   const stopRef = useRef(false);
 
   const fetchQueueStats = async () => {
@@ -39,8 +41,9 @@ export default function QueuePage() {
     const init = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push("/login"); return; }
-      const { data: me } = await supabase.from("pineyweb_clients").select("role").eq("user_id", session.user.id).single();
+      const { data: me } = await supabase.from("pineyweb_clients").select("role, full_name").eq("user_id", session.user.id).single();
       if (!me || me.role !== "admin") { router.push("/dashboard"); return; }
+      setAdminName(me.full_name || "Admin");
 
       await fetchQueueStats();
       setLoading(false);
@@ -170,17 +173,7 @@ export default function QueuePage() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#fef9f1", fontFamily: "'Lora', serif" }}>
-      <header className="sticky top-0 w-full z-50 backdrop-blur-xl" style={{ backgroundColor: "rgba(254,249,241,0.8)", boxShadow: "0 12px 40px rgba(48,20,0,0.06)" }}>
-        <div className="flex justify-between items-center px-8 py-4 max-w-screen-2xl mx-auto">
-          <Link href="/dashboard" className="text-2xl font-bold tracking-tighter" style={{ color: "#316342" }}>Piney Web Co.</Link>
-          <nav className="hidden md:flex items-center gap-8 text-sm">
-            <Link href="/dashboard" style={{ color: "#414942" }}>Dashboard</Link>
-            <Link href="/admin/clients" style={{ color: "#414942" }}>Clients</Link>
-            <Link href="/admin/prospects" style={{ color: "#414942" }}>Prospects</Link>
-            <span className="font-semibold pb-1" style={{ color: "#316342", borderBottom: "2px solid #316342" }}>Queue</span>
-          </nav>
-        </div>
-      </header>
+      <AdminNav activePage="Queue" adminName={adminName} onLogout={async () => { await supabase.auth.signOut(); router.push("/login"); }} />
 
       <main className="pt-24 pb-20 px-8 max-w-7xl mx-auto">
         <div className="mb-10">

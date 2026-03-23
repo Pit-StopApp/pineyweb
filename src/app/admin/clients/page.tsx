@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
+import AdminNav from "@/components/AdminNav";
 
 interface Client {
   id: string;
@@ -105,20 +106,7 @@ export default function AdminClients() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#fef9f1", fontFamily: "'Lora', serif" }}>
-      {/* Top Nav */}
-      <header className="fixed top-0 left-0 w-full flex justify-between items-center px-8 py-4 z-50 backdrop-blur-md" style={{ backgroundColor: "rgba(254,249,241,0.8)", boxShadow: "0 12px 40px rgba(48,20,0,0.06)" }}>
-        <Link href="/dashboard" className="text-2xl font-bold tracking-tighter" style={{ color: "#316342" }}>Piney Web Co.</Link>
-        <nav className="hidden md:flex items-center gap-8">
-          <Link href="/dashboard" className="text-sm tracking-wide uppercase" style={{ color: "#414942", opacity: 0.7 }}>Dashboard</Link>
-          <Link href="/admin/clients" className="text-sm tracking-wide uppercase font-bold" style={{ color: "#316342" }}>Clients</Link>
-          <Link href="/admin/prospects" className="text-sm tracking-wide uppercase" style={{ color: "#414942", opacity: 0.7 }}>Prospects</Link>
-          <Link href="/admin/queue" className="text-sm tracking-wide uppercase" style={{ color: "#414942", opacity: 0.7 }}>Queue</Link>
-        </nav>
-        <div className="flex items-center gap-4">
-          <span className="text-sm" style={{ color: "#414942" }}>{adminName}</span>
-          <button onClick={handleLogout} className="text-sm font-medium tracking-tight transition-colors" style={{ color: "#414942" }}>Log Out</button>
-        </div>
-      </header>
+      <AdminNav activePage="Clients" adminName={adminName} onLogout={handleLogout} />
 
       <main className="pt-24 pb-20 px-6 md:px-12 max-w-7xl mx-auto">
         {/* Page Header */}
