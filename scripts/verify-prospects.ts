@@ -68,9 +68,16 @@ async function dismissPopup(page: Page): Promise<void> {
 const EXCLUDED_DOMAINS = ["facebook.com", "fb.com", "instagram.com", "messenger.com", "meta.com", "wa.me", "whatsapp.com", "linkedin.com"];
 
 function findWebsite(text: string): string | null {
-  const patterns = /\bwww\.\S+|https?:\/\/\S+|\S+\.(com|net|org|io|co|biz)\b/gi;
-  const matches = text.match(patterns);
-  if (!matches) return null;
+  // Strip all email addresses first — they contain .com/.net and cause false positives
+  let cleaned = text.replace(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g, "");
+  // Strip phone numbers
+  cleaned = cleaned.replace(/[\+]?[\d\s\-().]{7,}/g, "");
+
+  // Only match explicit URLs: http(s):// or www. prefix — no bare domain patterns
+  const patterns = /\bhttps?:\/\/[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}[^\s)"]*/gi;
+  const wwwPatterns = /\bwww\.[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}[^\s)"]*/gi;
+
+  const matches = [...(cleaned.match(patterns) || []), ...(cleaned.match(wwwPatterns) || [])];
   for (const m of matches) {
     const domain = m.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].toLowerCase();
     if (!EXCLUDED_DOMAINS.some(d => domain.includes(d))) return m;
