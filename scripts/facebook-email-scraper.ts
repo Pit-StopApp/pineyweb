@@ -161,6 +161,44 @@ function extractWebsiteUrl(text: string): string | null {
 }
 
 // ============================================================================
+// FACEBOOK POPUP DISMISSAL
+// ============================================================================
+
+async function dismissFacebookPopup(page: Page): Promise<void> {
+  try {
+    // Wait up to 2s for a signup/login popup to appear
+    const popup = page.locator('[role="dialog"], [data-testid="royal_login_form"]').first();
+    const visible = await popup.isVisible().catch(() => false);
+
+    if (visible) {
+      // Check if it's a signup/login modal (not a security prompt)
+      const text = await popup.textContent().catch(() => "") || "";
+      const isSignupModal = /create.*account|log\s*in.*sign\s*up|sign\s*up|join facebook/i.test(text);
+
+      if (isSignupModal) {
+        // Try clicking the close/X button
+        const closeBtn = popup.locator('[aria-label="Close"], [aria-label="close"], button:has-text("Close")').first();
+        if (await closeBtn.isVisible().catch(() => false)) {
+          await closeBtn.click().catch(() => {});
+          await page.waitForTimeout(500);
+          console.log(`[${ts()}]   Dismissed signup popup`);
+          return;
+        }
+
+        // Fallback: press Escape
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(500);
+
+        // Verify it's gone
+        if (!await popup.isVisible().catch(() => false)) {
+          console.log(`[${ts()}]   Dismissed signup popup (Escape)`);
+        }
+      }
+    }
+  } catch { /* non-blocking */ }
+}
+
+// ============================================================================
 // PAGE EXTRACTION
 // ============================================================================
 
@@ -198,6 +236,7 @@ async function extractFromFacebookPage(page: Page): Promise<{ email: string | nu
       try {
         await page.goto(contactUrl, { waitUntil: "domcontentloaded", timeout: 10000 });
         await page.waitForTimeout(2000);
+        await dismissFacebookPopup(page);
         const contactText = sanitizePageText(await page.evaluate(() => document.body?.innerText || "").catch(() => ""));
         const contactEmail = extractCleanEmail(contactText);
         if (contactEmail) return { email: contactEmail, website: website || extractWebsiteUrl(contactText) };
@@ -252,7 +291,7 @@ async function main() {
   const sessionId = `phase2-${sessionDate.replace(/[:.]/g, "-").slice(0, 19)}`;
 
   const limit = TEST_MODE ? Math.min(5, prospects.length) : prospects.length;
-  if (TEST_MODE) console.log(`[${ts()}] TEST MODE — processing ${limit} of ${prospects.length} prospects\n`);
+  console.log(`[${ts()}] ${TEST_MODE ? "TEST MODE — processing 5 prospects only" : `Processing all ${limit} prospects`}\n`);
 
   for (let i = 0; i < limit; i++) {
     const p = prospects[i];
@@ -304,7 +343,7 @@ async function main() {
 
         const page = await context.newPage();
 
-        // Anonymous — no cookies, no login, fresh context via proxy
+        // Anonymous — no cookies, no login, fresh context
         // Navigate to candidate URL
         await page.goto(candidate.facebook_url, { waitUntil: "domcontentloaded", timeout: 15000 });
         await page.waitForTimeout(2000);
@@ -317,6 +356,9 @@ async function main() {
           await context.close();
           continue;
         }
+
+        // Dismiss Facebook signup/login popup if present
+        await dismissFacebookPopup(page);
 
         // Extract email and website
         const { email, website } = await extractFromFacebookPage(page);
