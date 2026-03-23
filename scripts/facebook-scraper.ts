@@ -549,6 +549,19 @@ function shuffleArray<T>(arr: T[]): T[] {
   const s = [...arr]; for (let i = s.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [s[i], s[j]] = [s[j], s[i]]; } return s;
 }
 
+// --- Wrong page detection after navigation ---
+const WRONG_PAGE_PATTERNS = ["/professional_dashboard", "/home.php", "/watch", "/marketplace", "/gaming", "/groups/feed"];
+
+function isWrongPage(url: string): boolean {
+  // Must be on a facebook.com business/profile page, not feed/dashboard/home
+  if (!url.includes("facebook.com")) return true;
+  if (url.match(/facebook\.com\/?$/) || url.match(/facebook\.com\/\?/)) return true; // Home feed
+  for (const pattern of WRONG_PAGE_PATTERNS) {
+    if (url.includes(pattern)) return true;
+  }
+  return false;
+}
+
 // --- Cursor-as-eyes: move cursor near element before evaluating it ---
 async function gazeAt(page: Page, selector: string): Promise<boolean> {
   const el = page.locator(selector).first();
@@ -721,12 +734,18 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
         await page.goto(matchUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
       }
 
-      console.log(`[${ts()}]   On page: ${page.url()}`);
+      const landedUrl = page.url();
+      console.log(`[${ts()}]   On page: ${landedUrl}`);
+
+      // Verify we landed on a valid business/profile page
+      if (isWrongPage(landedUrl) || isRedirectedToPersonalProfile(landedUrl)) {
+        console.log(`[${ts()}]   Wrong page after navigation — skipping prospect`);
+        return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
+      }
+
       // Step 37: Page load pause
       await humanDelay(page, 800, 2000);
-
       await checkForPopup(page);
-      if (isRedirectedToPersonalProfile(page.url())) return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
 
       // Cursor-as-eyes: gaze at page title/name
       await gazeAt(page, 'h1, [role="heading"]');
@@ -765,10 +784,16 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
       console.log(`[${ts()}]   Navigating to matched page: ${candidates[i].href}`);
       await checkForPopup(page);
       await page.goto(candidates[i].href, { waitUntil: "domcontentloaded", timeout: 15000 });
-      console.log(`[${ts()}]   On page: ${page.url()}`);
+      const landedUrl2 = page.url();
+      console.log(`[${ts()}]   On page: ${landedUrl2}`);
+
+      if (isWrongPage(landedUrl2) || isRedirectedToPersonalProfile(landedUrl2)) {
+        console.log(`[${ts()}]   Wrong page after navigation — skipping prospect`);
+        return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
+      }
+
       await humanDelay(page, 800, 2000);
       await checkForPopup(page);
-      if (isRedirectedToPersonalProfile(page.url())) return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
 
       // Cursor-as-eyes: gaze at page title
       await gazeAt(page, 'h1, [role="heading"]');
