@@ -28,9 +28,10 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const WEBSHARE_API_KEY = process.env.WEBSHARE_API_KEY;
 const PINEYWEB_URL = process.env.PINEYWEB_URL || "https://pineyweb.com";
+const TEST_MODE = true; // true = no proxy, 5 prospects only | false = full proxy, unlimited
 
 if (!SUPABASE_URL || !SUPABASE_KEY) { console.error("Missing Supabase env vars"); process.exit(1); }
-if (!WEBSHARE_API_KEY) { console.error("Missing WEBSHARE_API_KEY"); process.exit(1); }
+if (!TEST_MODE && !WEBSHARE_API_KEY) { console.error("Missing WEBSHARE_API_KEY"); process.exit(1); }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -234,8 +235,9 @@ async function main() {
 
   console.log(`[${ts()}] Loaded ${prospects.length} prospects with Facebook URLs\n`);
 
-  // Fetch proxy config
-  await fetchProxyConfig();
+  // Fetch proxy config (skip in test mode)
+  if (!TEST_MODE) await fetchProxyConfig();
+  else console.log(`[${ts()}] TEST MODE — no proxy, direct connection`);
 
   const browser = await chromium.launch({ headless: false, args: ["--disable-blink-features=AutomationControlled"] });
 
@@ -249,7 +251,10 @@ async function main() {
   const sessionDate = new Date().toISOString();
   const sessionId = `phase2-${sessionDate.replace(/[:.]/g, "-").slice(0, 19)}`;
 
-  for (let i = 0; i < prospects.length; i++) {
+  const limit = TEST_MODE ? Math.min(5, prospects.length) : prospects.length;
+  if (TEST_MODE) console.log(`[${ts()}] TEST MODE — processing ${limit} of ${prospects.length} prospects\n`);
+
+  for (let i = 0; i < limit; i++) {
     const p = prospects[i];
 
     // Get all candidates for this prospect, ordered by rank
@@ -266,29 +271,36 @@ async function main() {
     for (const candidate of candidates) {
       if (foundEmail) break;
 
-      // Get a proxy
-      let proxy: WebshareProxy;
-      try {
-        proxy = await getProxy();
-      } catch {
-        console.log(`[${ts()}]   No proxies available — skipping prospect`);
-        errors++;
-        break;
+      // Get a proxy (skip in test mode)
+      let proxy: WebshareProxy | null = null;
+      if (!TEST_MODE) {
+        try {
+          proxy = getProxy();
+        } catch {
+          console.log(`[${ts()}]   No proxies available — skipping prospect`);
+          errors++;
+          break;
+        }
       }
 
       let context: BrowserContext | null = null;
       try {
-        console.log(`[${ts()}] [${i + 1}/${prospects.length}] ${p.business_name} (${p.city}) — rank ${candidate.rank}, score ${candidate.match_score}% — via ${proxy.proxy_address}`);
+        const proxyLabel = proxy ? `via ${proxy.proxy_address}` : "direct";
+        console.log(`[${ts()}] [${i + 1}/${limit}] ${p.business_name} (${p.city}) — rank ${candidate.rank}, score ${candidate.match_score}% — ${proxyLabel}`);
 
-        context = await browser.newContext({
-          proxy: {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const contextOpts: any = {
+          userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+          viewport: { width: 1366, height: 768 },
+        };
+        if (proxy) {
+          contextOpts.proxy = {
             server: `http://${proxy.proxy_address}:${proxy.port}`,
             username: proxy.username,
             password: proxy.password,
-          },
-          userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-          viewport: { width: 1366, height: 768 },
-        });
+          };
+        }
+        context = await browser.newContext(contextOpts);
 
         const page = await context.newPage();
 
@@ -376,7 +388,7 @@ async function main() {
 
     // Progress every 50
     if ((i + 1) % 50 === 0) {
-      console.log(`\n[${ts()}] [Progress] ${i + 1}/${prospects.length} | Emails: ${emailsFound} | Saved: ${emailsSaved} | Website skipped: ${websiteSkipped} | Skipped: ${skipped} | Errors: ${errors}\n`);
+      console.log(`\n[${ts()}] [Progress] ${i + 1}/${limit} | Emails: ${emailsFound} | Saved: ${emailsSaved} | Website skipped: ${websiteSkipped} | Skipped: ${skipped} | Errors: ${errors}\n`);
     }
   }
 
