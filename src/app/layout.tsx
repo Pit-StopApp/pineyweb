@@ -11,9 +11,22 @@ const lora = Lora({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://pineyweb.com"),
   title: "Piney Web Co. | Websites Built to Bring You Customers",
   description:
     "We build websites for local businesses designed to be found online and convert visitors into paying customers. Simple, professional, and built to grow with you.",
+  openGraph: {
+    title: "Piney Web Co. | Websites Built to Bring You Customers",
+    description: "We build websites for local businesses designed to be found online and convert visitors into paying customers.",
+    url: "https://pineyweb.com",
+    siteName: "Piney Web Co.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Piney Web Co. | Websites Built to Bring You Customers",
+    description: "We build websites for local businesses designed to be found online and convert visitors into paying customers.",
+  },
 };
 
 export default function RootLayout({
