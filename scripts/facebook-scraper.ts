@@ -45,6 +45,24 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 function ts(): string { return new Date().toLocaleTimeString(); }
 
+// --- Visible cursor overlay for debugging mouse movement ---
+async function injectCursorOverlay(page: Page) {
+  await page.evaluate(() => {
+    if (document.getElementById("__pw_cursor")) return;
+    const dot = document.createElement("div");
+    dot.id = "__pw_cursor";
+    dot.style.cssText = "position:fixed;width:10px;height:10px;border-radius:50%;background:#4A7C59;opacity:0.5;pointer-events:none;z-index:999999;top:0;left:0;transition:none;";
+    document.body.appendChild(dot);
+  }).catch(() => {});
+}
+
+async function updateCursorPosition(page: Page, x: number, y: number) {
+  await page.evaluate(([cx, cy]) => {
+    const dot = document.getElementById("__pw_cursor");
+    if (dot) { dot.style.left = cx + "px"; dot.style.top = cy + "px"; }
+  }, [Math.round(x), Math.round(y)]).catch(() => {});
+}
+
 // ============================================================================
 // SECTION 1: NO-REPEAT RANDOM ENGINE
 // ============================================================================
@@ -139,7 +157,9 @@ async function moveMouse(page: Page, targetX: number, targetY: number, tier: Spe
     }
     speed = Math.min(speed, 3.0);
     const delay = Math.max(1, Math.round(segDist / speed));
-    await page.mouse.move(Math.round(path[i].x), Math.round(path[i].y));
+    const px = Math.round(path[i].x), py = Math.round(path[i].y);
+    await page.mouse.move(px, py);
+    await updateCursorPosition(page, px, py);
     if (delay > 1) await page.waitForTimeout(delay);
   }
 
@@ -218,7 +238,7 @@ async function humanType(page: Page, text: string) {
         await page.keyboard.type(wrong[Math.floor(Math.random() * 26)], { delay: randInt(50, 100, "typo2") });
         await humanDelay(page, 50, 150); // notice delay
         await page.keyboard.press("Backspace");
-        await humanDelay(page, randInt(40, 80, "bksp"), randInt(80, 120, "bksp2"));
+        await page.waitForTimeout(randInt(60, 90, "bkspDel1"));
         await page.keyboard.press("Backspace");
         await humanDelay(page, 80, 200);
       } else if (typoRoll < rand(0.10, 0.15, "singleTypo")) {
@@ -244,11 +264,10 @@ async function clearSearchBar(page: Page) {
     await humanDelay(page, 50, 150);
     await page.keyboard.press("Backspace");
   } else {
-    // Repeated backspace with variable speed
+    // Repeated backspace — 60-90ms per character, never same delay twice
     for (let i = 0; i < 80; i++) {
       await page.keyboard.press("Backspace");
-      await page.waitForTimeout(randInt(30, 80, "clearDelay"));
-      // Check if empty
+      await page.waitForTimeout(randInt(60, 90, "clearBksp"));
       const val = await page.evaluate(() => {
         const el = document.activeElement as HTMLInputElement;
         return el?.value?.length ?? el?.textContent?.length ?? 0;
@@ -813,7 +832,10 @@ async function main() {
   const vpW = randInt(1280, 1480, "vpW"), vpH = randInt(800, 1000, "vpH");
   const context = await browser.newContext({ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", viewport: { width: vpW, height: vpH } });
   const page = await context.newPage();
+  // Inject cursor overlay after every navigation
+  page.on("load", () => { injectCursorOverlay(page).catch(() => {}); });
   await loadOrCreateSession(context, page);
+  await injectCursorOverlay(page);
 
   // Step 4: Random idle pause before doing anything
   await humanDelay(page, 1500, 4000);
