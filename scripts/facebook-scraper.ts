@@ -51,15 +51,24 @@ async function injectCursorOverlay(page: Page) {
     if (document.getElementById("__pw_cursor")) return;
     const dot = document.createElement("div");
     dot.id = "__pw_cursor";
-    dot.style.cssText = "position:fixed;width:10px;height:10px;border-radius:50%;background:#4A7C59;opacity:0.5;pointer-events:none;z-index:999999;top:0;left:0;transition:none;";
+    dot.style.cssText = "position:fixed;width:10px;height:10px;border-radius:50%;background:#4A7C59;opacity:0.5;pointer-events:none;z-index:999999;top:0;left:0;transform:translate(-5px,-5px);transition:none;will-change:transform;";
     document.body.appendChild(dot);
+    // Set up fast position update via window property
+    (window as unknown as Record<string, unknown>).__pw_updateCursor = (x: number, y: number) => {
+      dot.style.left = x + "px";
+      dot.style.top = y + "px";
+    };
   }).catch(() => {});
 }
 
 async function updateCursorPosition(page: Page, x: number, y: number) {
   await page.evaluate(([cx, cy]) => {
-    const dot = document.getElementById("__pw_cursor");
-    if (dot) { dot.style.left = cx + "px"; dot.style.top = cy + "px"; }
+    const fn = (window as unknown as Record<string, unknown>).__pw_updateCursor as ((x: number, y: number) => void) | undefined;
+    if (fn) fn(cx, cy);
+    else {
+      const dot = document.getElementById("__pw_cursor");
+      if (dot) { dot.style.left = cx + "px"; dot.style.top = cy + "px"; }
+    }
   }, [Math.round(x), Math.round(y)]).catch(() => {});
 }
 
@@ -517,45 +526,6 @@ function shuffleArray<T>(arr: T[]): T[] {
 // SECTION 7: FACEBOOK INTERACTION LAYER (spec-compliant)
 // ============================================================================
 
-async function navigateToSearch(page: Page, query: string): Promise<void> {
-  // Step 5: Mouse accelerates from stationary to search bar
-  const searchBar = await page.locator('[aria-label="Search Facebook"]').first().boundingBox().catch(() => null)
-    || await page.locator('input[type="search"]').first().boundingBox().catch(() => null);
-
-  if (searchBar) {
-    // Step 6: Click search bar at random point within clickable area
-    const sx = searchBar.x + randInt(5, Math.max(6, searchBar.width - 5), "searchX");
-    const sy = searchBar.y + randInt(3, Math.max(4, searchBar.height - 3), "searchY");
-    await humanClick(page, sx, sy, "normal");
-  } else {
-    // Fallback: navigate directly
-    await page.goto(`https://www.facebook.com/search/pages/?q=${encodeURIComponent(query)}`, { waitUntil: "domcontentloaded", timeout: 60000 });
-    return;
-  }
-
-  // Step 7: Random pause as if recalling the name
-  await humanDelay(page, 300, 900);
-
-  // Step 8: Type company name with variable WPM and typos
-  await humanType(page, query);
-
-  // Step 9: Autocomplete handling — 85-90% ignore
-  await humanDelay(page, 200, 500);
-  const ignoreAutocomplete = Math.random() < rand(0.85, 0.90, "autocomplete");
-  if (!ignoreAutocomplete) {
-    // Brief pause to glance at suggestions
-    await humanDelay(page, 300, 600);
-    // Very rare click on suggestion — skip for safety
-  }
-
-  // Step 11: Re-read pause after last character
-  await humanDelay(page, 400, 1100);
-  // Step 12: Finger travels to Enter
-  await humanDelay(page, 50, 150);
-  // Step 13: Press Enter
-  await page.keyboard.press("Enter");
-}
-
 async function extractEmailFromPage(page: Page): Promise<{ email: string | null; website: string | null }> {
   try {
     if (isRedirectedToPersonalProfile(page.url())) return { email: null, website: null };
@@ -736,15 +706,46 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
   return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
 }
 
+// Refocus search bar using / keyboard shortcut (step 63 alternative)
+async function refocusSearchBar(page: Page) {
+  await humanDelay(page, 50, 150);
+  await page.keyboard.press("/");
+  await humanDelay(page, 300, 600);
+}
+
 async function searchFacebook(page: Page, businessName: string, city: string, phone: string | null): Promise<SearchResult> {
   const humanQuery = humanizeQuery(businessName, city);
-  const searchUrl = `https://www.facebook.com/search/pages/?q=${encodeURIComponent(humanQuery)}`;
 
-  // Step 5-13: Navigate to search
+  // Step 5-13: Type search character by character
   await checkForPopup(page);
   await humanDelay(page, 1200, 2500);
   console.log(`[${ts()}]   Searching Facebook: "${humanQuery}"`);
-  await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+
+  // Navigate to Facebook home if not already there (e.g. after visiting a business page)
+  if (!page.url().includes("facebook.com/search") && !page.url().match(/facebook\.com\/?$/)) {
+    await page.goto("https://www.facebook.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
+    await humanDelay(page, 1500, 3000);
+    await injectCursorOverlay(page);
+  }
+
+  // Use / shortcut to focus search bar, then type
+  await refocusSearchBar(page);
+  await clearSearchBar(page);
+  await humanDelay(page, 300, 900); // Step 7: pause as if recalling name
+  await humanType(page, humanQuery);
+
+  // Step 9: Autocomplete handling — 85-90% ignore
+  await humanDelay(page, 200, 500);
+  if (Math.random() > rand(0.85, 0.90, "autocomplete")) {
+    await humanDelay(page, 300, 600); // glance at suggestions
+  }
+
+  // Step 11-13: Re-read, finger travel, Enter
+  await humanDelay(page, 400, 1100);
+  await humanDelay(page, 50, 150);
+  await page.keyboard.press("Enter");
+
+  // Wait for results to load
   await humanDelay(page, 2000, 4000);
   await scrollWithInertia(page, randInt(100, 300, "searchScroll"));
 
@@ -773,9 +774,15 @@ async function searchFacebook(page: Page, businessName: string, city: string, ph
     await humanDelay(page, 1000, 2000);
     console.log(`[${ts()}]   No match. Retrying with: "${simplified}"`);
 
-    // Step 15-22: Navigate to retry search
-    const retryUrl = `https://www.facebook.com/search/pages/?q=${encodeURIComponent(simplified)}`;
-    await page.goto(retryUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+    // Steps 15-22: Retry with simplified name — type character by character
+    console.log(`[${ts()}]   Retrying with: "${simplified}"`);
+    await refocusSearchBar(page);
+    await clearSearchBar(page);
+    await humanDelay(page, 300, 800); // Step 18: thinking how to rephrase
+    await humanType(page, simplified);
+    await humanDelay(page, 400, 1100); // Step 20: re-read
+    await humanDelay(page, 50, 150); // Step 21: finger to Enter
+    await page.keyboard.press("Enter");
     await humanDelay(page, 2000, 4000);
     await scrollWithInertia(page, randInt(100, 300, "retryScroll"));
     await humanDelay(page, 2000, 3500);
