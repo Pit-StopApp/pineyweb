@@ -177,10 +177,11 @@ function generateBezierPath(start: Point, end: Point): Point[] {
 }
 
 type SpeedTier = "slow" | "normal" | "fast";
+const MOUSE_BOOST = 1.1; // +10% speed multiplier
 const SPEED_RANGES: Record<SpeedTier, [number, number]> = {
-  slow: [0.3, 0.8],
-  normal: [0.8, 1.5],
-  fast: [1.5, 2.5],
+  slow: [0.3 * MOUSE_BOOST, 0.8 * MOUSE_BOOST],
+  normal: [0.8 * MOUSE_BOOST, 1.5 * MOUSE_BOOST],
+  fast: [1.5 * MOUSE_BOOST, 2.5 * MOUSE_BOOST],
 };
 
 let mouseX = 600;
@@ -193,8 +194,8 @@ async function moveMouse(page: Page, targetX: number, targetY: number, tier: Spe
 
   const accelEnd = Math.floor(path.length * rand(0.2, 0.3, "accelPhase"));
   const decelStart = Math.floor(path.length * (1 - rand(0.2, 0.3, "decelPhase")));
-  const startSpeed = rand(0.2, 0.4, "startSpeed");
-  const endSpeed = rand(0.3, 0.5, "endSpeed");
+  const startSpeed = rand(0.2 * MOUSE_BOOST, 0.4 * MOUSE_BOOST, "startSpeed");
+  const endSpeed = rand(0.3 * MOUSE_BOOST, 0.5 * MOUSE_BOOST, "endSpeed");
 
   // Mid-path course correction: 10-15% chance of 3-8px deviation around 40-60% mark
   const hasCourseCorrection = Math.random() < rand(0.10, 0.15, "courseCorr");
@@ -1119,13 +1120,28 @@ async function main() {
         verificationReason = reason;
 
         if (verified && confidence >= 7) {
-          // Email found — unfocus sequence: simulate opening Mail app
-          // Eyes find email, pause before mouse
-          await humanDelay(page, 300, 700);
-          // Mouse drifts near email
-          await moveMouse(page, randInt(300, 700, "emailDrift"), randInt(250, 450, "emailDriftY"), "slow");
-          // Pause as if noting the email mentally
-          await humanDelay(page, 2000, 4000);
+          // Scroll the email into view and gaze at it before unfocus
+          try {
+            // Find the email text in the DOM and scroll it into the viewport
+            const emailEl = page.locator(`text="${email}"`).first();
+            const emailVisible = await emailEl.isVisible().catch(() => false);
+            if (emailVisible) {
+              await emailEl.scrollIntoViewIfNeeded().catch(() => {});
+              await humanDelay(page, 300, 600);
+              const emailBox = await emailEl.boundingBox().catch(() => null);
+              if (emailBox) {
+                // Cursor-as-eyes: gaze near the email element
+                await gazeAtBox(page, emailBox);
+              }
+            } else {
+              // Email found via text scan but element not locatable — gaze at main area
+              await gazeAt(page, '[role="main"]');
+            }
+          } catch {
+            // Non-blocking — continue with unfocus even if scroll fails
+          }
+          // Pause as if reading/noting the email
+          await humanDelay(page, 1500, 3000);
 
           // Mouse drifts down toward dock (Mail app) — slow/deliberate
           await moveMouse(page, randInt(400, 700, "dockX"), vpH - randInt(5, 25, "dockY"), "slow");
