@@ -166,34 +166,44 @@ function extractWebsiteUrl(text: string): string | null {
 
 async function dismissFacebookPopup(page: Page): Promise<void> {
   try {
-    // Wait up to 2s for a signup/login popup to appear
-    const popup = page.locator('[role="dialog"], [data-testid="royal_login_form"]').first();
-    const visible = await popup.isVisible().catch(() => false);
-
-    if (visible) {
-      // Check if it's a signup/login modal (not a security prompt)
-      const text = await popup.textContent().catch(() => "") || "";
-      const isSignupModal = /create.*account|log\s*in.*sign\s*up|sign\s*up|join facebook/i.test(text);
-
-      if (isSignupModal) {
-        // Try clicking the close/X button
-        const closeBtn = popup.locator('[aria-label="Close"], [aria-label="close"], button:has-text("Close")').first();
-        if (await closeBtn.isVisible().catch(() => false)) {
-          await closeBtn.click().catch(() => {});
-          await page.waitForTimeout(500);
-          console.log(`[${ts()}]   Dismissed signup popup`);
-          return;
-        }
-
-        // Fallback: press Escape
-        await page.keyboard.press("Escape");
-        await page.waitForTimeout(500);
-
-        // Verify it's gone
-        if (!await popup.isVisible().catch(() => false)) {
-          console.log(`[${ts()}]   Dismissed signup popup (Escape)`);
-        }
+    // Detect login/signup popup by form elements, not text content
+    const hasLoginForm = await page.evaluate(() => {
+      // Check for email/phone input field in any modal
+      const inputs = document.querySelectorAll('input[name="email"], input[type="email"], input[placeholder*="email" i], input[placeholder*="phone" i]');
+      for (const input of inputs) {
+        const dialog = input.closest('[role="dialog"], [aria-modal="true"]');
+        if (dialog) return true;
       }
+      // Check for "Log In" button in any modal
+      const buttons = document.querySelectorAll('[role="dialog"] button, [aria-modal="true"] button');
+      for (const btn of buttons) {
+        if (/^log\s*in$/i.test(btn.textContent?.trim() || "")) return true;
+      }
+      return false;
+    }).catch(() => false);
+
+    if (hasLoginForm) {
+      // Click the visible close button
+      const closeBtn = page.locator('[aria-label="Close"]').first();
+      if (await closeBtn.isVisible().catch(() => false)) {
+        await closeBtn.click().catch(() => {});
+        await page.waitForTimeout(500);
+        console.log(`[${ts()}]   Dismissed login popup (Close button)`);
+        return;
+      }
+      // Fallback: Escape
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(500);
+      console.log(`[${ts()}]   Dismissed login popup (Escape)`);
+      return;
+    }
+
+    // Also check for any visible [aria-label="Close"] on a dialog
+    const closeOnDialog = page.locator('[role="dialog"] [aria-label="Close"], [aria-modal="true"] [aria-label="Close"]').first();
+    if (await closeOnDialog.isVisible().catch(() => false)) {
+      await closeOnDialog.click().catch(() => {});
+      await page.waitForTimeout(500);
+      console.log(`[${ts()}]   Dismissed popup (dialog close button)`);
     }
   } catch { /* non-blocking */ }
 }
