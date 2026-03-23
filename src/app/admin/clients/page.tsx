@@ -30,7 +30,7 @@ export default function AdminClients() {
   const [msg, setMsg] = useState("");
   const [page, setPage] = useState(0);
   // Scanner clients
-  interface ScannerClient { id: string; client_id: string; name: string; scanner_type: string | null; geography: string | null; status: string; last_run_at: string | null; total_leads: number; keywords: string[] | null; business_types: string[] | null; google_sheet_url: string | null; }
+  interface ScannerClient { id: string; client_id: string; name: string; scanner_type: string | null; geography: string | null; status: string; last_run_at: string | null; total_leads: number; keywords: string[] | null; business_types: string[] | null; google_sheet_url: string | null; home_city: string | null; home_state: string | null; client_slug: string | null; }
   const [scannerClients, setScannerClients] = useState<ScannerClient[]>([]);
   const [scanModal, setScanModal] = useState<ScannerClient | null>(null);
   const [scanCity, setScanCity] = useState("");
@@ -295,7 +295,7 @@ export default function AdminClients() {
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={() => { setScanModal(sc); setScanCity(sc.geography || ""); setScanProgress(""); }} className="flex-1 py-2 rounded-md text-xs font-bold text-white" style={{ backgroundColor: "#316342" }}>Run Scanner</button>
+                      <button onClick={() => { setScanModal(sc); setScanCity(sc.home_city && sc.home_state ? `${sc.home_city}, ${sc.home_state}` : sc.geography || ""); setScanProgress(""); }} className="flex-1 py-2 rounded-md text-xs font-bold text-white" style={{ backgroundColor: "#316342" }}>Run Scanner</button>
                       {sc.google_sheet_url && <a href={sc.google_sheet_url} target="_blank" rel="noopener noreferrer" className="flex-1 py-2 rounded-md text-xs font-bold text-center border" style={{ color: "#316342", borderColor: "#316342" }}>View Leads</a>}
                     </div>
                   </div>
@@ -347,7 +347,7 @@ export default function AdminClients() {
                     const res = await fetch("/api/admin/client-scanner", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ client_id: scanModal.client_id, city: scanCity, radius: scanRadius, max_results: scanMaxResults, keywords: scanModal.keywords || [], business_types: scanModal.business_types || [] }),
+                      body: JSON.stringify({ client_id: scanModal.id, client_slug: scanModal.client_slug || "sip-society", city: scanCity, radius: scanRadius, max_results: scanMaxResults, keywords: scanModal.keywords || [], business_types: scanModal.business_types || [] }),
                     });
                     const data = await res.json();
                     setScanProgress(`Complete — ${data.total || 0} leads found`);

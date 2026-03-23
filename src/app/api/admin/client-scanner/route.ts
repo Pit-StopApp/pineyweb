@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     let apiCalls = 0;
 
     for (const keyword of keywords) {
-      const query = `${keyword} near ${city}`;
+      const query = `${keyword} ${city}`;
       const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
         method: "POST",
         headers: {
