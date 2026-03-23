@@ -133,15 +133,26 @@ async function dismissFacebookPopup(page: Page): Promise<void> {
 // PAGE EXTRACTION
 // ============================================================================
 
+async function scanPageText(page: Page, label: string): Promise<{ text: string; email: string | null; website: string | null }> {
+  const rawText = await page.evaluate(() => document.body?.innerText || "").catch(() => "");
+  const cleaned = sanitizePageText(rawText);
+  console.log(`[${ts()}]   ${label}: ${cleaned.length} chars extracted`);
+  if (cleaned.length < 500) console.log(`[${ts()}]   ⚠ Low content — page may not be fully loaded`);
+  const website = extractWebsiteUrl(cleaned);
+  const email = extractCleanEmail(cleaned);
+  return { text: cleaned, email, website };
+}
+
 async function extractFromFacebookPage(page: Page): Promise<{ email: string | null; website: string | null }> {
   try {
-    // Broad text scan of entire page
-    const rawText = await page.evaluate(() => document.body?.innerText || "").catch(() => "");
-    const cleaned = sanitizePageText(rawText);
+    const baseUrl = page.url();
 
-    const website = extractWebsiteUrl(cleaned);
-    const email = extractCleanEmail(cleaned);
-    if (email) return { email, website };
+    // Step 1: Wait for full page content after popup dismissal
+    try { await page.waitForLoadState("networkidle", { timeout: 8000 }); } catch { /* timeout ok */ }
+
+    // Step 2: Scan initial page content
+    const initial = await scanPageText(page, "Initial scan");
+    if (initial.email) return { email: initial.email, website: initial.website };
 
     // Check mailto links
     const mailtoLinks = await page.locator('a[href^="mailto:"]').all();
@@ -149,32 +160,39 @@ async function extractFromFacebookPage(page: Page): Promise<{ email: string | nu
       const href = await link.getAttribute("href").catch(() => null);
       if (href) {
         const mailtoEmail = extractCleanEmail(href.replace("mailto:", "").split("?")[0]);
-        if (mailtoEmail) return { email: mailtoEmail, website };
+        if (mailtoEmail) { console.log(`[${ts()}]   Email found via mailto`); return { email: mailtoEmail, website: initial.website }; }
       }
     }
 
-    // Scroll to load lazy content and scan again
-    await page.evaluate(() => window.scrollBy({ top: 500, behavior: "smooth" }));
+    // Step 3: Scroll down to trigger lazy loading of About/Contact section
+    await page.evaluate(() => window.scrollBy({ top: 600, behavior: "smooth" }));
     await page.waitForTimeout(2000);
-    const scrolledText = sanitizePageText(await page.evaluate(() => document.body?.innerText || "").catch(() => ""));
-    const scrolledEmail = extractCleanEmail(scrolledText);
-    if (scrolledEmail) return { email: scrolledEmail, website: website || extractWebsiteUrl(scrolledText) };
+    const scrolled = await scanPageText(page, "After scroll");
+    if (scrolled.email) return { email: scrolled.email, website: scrolled.website || initial.website };
 
-    // Try contact info page
-    const currentUrl = page.url();
-    if (!currentUrl.includes("profile.php?id=")) {
-      const contactUrl = currentUrl.replace(/\/$/, "") + "/about_contact_and_basic_info";
+    // Step 4: Navigate to /about page and scan
+    if (!baseUrl.includes("profile.php?id=")) {
+      const aboutUrl = baseUrl.replace(/\/$/, "") + "/about";
+      try {
+        await page.goto(aboutUrl, { waitUntil: "domcontentloaded", timeout: 10000 });
+        await page.waitForTimeout(1500);
+        await dismissFacebookPopup(page);
+        const aboutScan = await scanPageText(page, "About page");
+        if (aboutScan.email) return { email: aboutScan.email, website: aboutScan.website || initial.website };
+      } catch { /* about page failed */ }
+
+      // Step 5: Try /about_contact_and_basic_info
+      const contactUrl = baseUrl.replace(/\/$/, "") + "/about_contact_and_basic_info";
       try {
         await page.goto(contactUrl, { waitUntil: "domcontentloaded", timeout: 10000 });
-        await page.waitForTimeout(2000);
+        await page.waitForTimeout(1500);
         await dismissFacebookPopup(page);
-        const contactText = sanitizePageText(await page.evaluate(() => document.body?.innerText || "").catch(() => ""));
-        const contactEmail = extractCleanEmail(contactText);
-        if (contactEmail) return { email: contactEmail, website: website || extractWebsiteUrl(contactText) };
-      } catch { /* contact page failed — move on */ }
+        const contactScan = await scanPageText(page, "Contact page");
+        if (contactScan.email) return { email: contactScan.email, website: contactScan.website || initial.website };
+      } catch { /* contact page failed */ }
     }
 
-    return { email: null, website };
+    return { email: null, website: initial.website };
   } catch (err) {
     console.log(`[${ts()}]   Extraction error: ${err instanceof Error ? err.message : err}`);
     return { email: null, website: null };
@@ -234,15 +252,15 @@ async function main() {
 
     if (!candidates?.length) { skipped++; continue; }
 
+    // Only try rank 1 candidate — best match from Phase 1
+    const candidate = candidates[0];
     let foundEmail = false;
 
-    for (const candidate of candidates) {
-      if (foundEmail) break;
-
+    {
       let context: BrowserContext | null = null;
       try {
         const proxyLabel = PROXY_CONFIG ? "via proxy" : "direct";
-        console.log(`[${ts()}] [${i + 1}/${limit}] ${p.business_name} (${p.city}) — rank ${candidate.rank}, score ${candidate.match_score}% — ${proxyLabel}`);
+        console.log(`[${ts()}] [${i + 1}/${limit}] ${p.business_name} (${p.city}) — score ${candidate.match_score}% — ${proxyLabel}`);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const contextOpts: any = {
@@ -336,7 +354,6 @@ async function main() {
         if (context) { try { await context.close(); } catch { /* ignore */ } }
       }
     }
-
     if (!foundEmail) skipped++;
 
     // Progress every 50
