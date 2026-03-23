@@ -205,7 +205,7 @@ function generateSoftBracketPath(start: Point, end: Point): Point[] {
 }
 
 type SpeedTier = "slow" | "normal" | "fast";
-const MOUSE_BOOST = 1.21; // 1.1 × 1.1 — two cumulative +10% boosts
+const MOUSE_BOOST = 1.1; // Single +10% boost on baseline speeds
 const SPEED_RANGES: Record<SpeedTier, [number, number]> = {
   slow: [0.3 * MOUSE_BOOST, 0.8 * MOUSE_BOOST],
   normal: [0.8 * MOUSE_BOOST, 1.5 * MOUSE_BOOST],
