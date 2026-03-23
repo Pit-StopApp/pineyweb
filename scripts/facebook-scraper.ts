@@ -535,6 +535,31 @@ async function scrapeCityFromPage(page: Page): Promise<string | null> {
   } catch { return null; }
 }
 
+// --- Website qualification check — runs FIRST before any other check ---
+async function checkForWebsite(page: Page): Promise<string | null> {
+  try {
+    const pageText = await page.evaluate(() => document.body?.innerText || "").catch(() => "");
+    const sanitized = sanitizePageText(pageText);
+    // Check for website URLs
+    const website = extractWebsiteUrl(sanitized);
+    if (website) return website;
+    // Broad pattern scan for common website indicators
+    const webPatterns = /\bwww\.\S+|https?:\/\/\S+|\S+\.(com|net|org|io|co|biz)\b/gi;
+    const matches = sanitized.match(webPatterns);
+    if (matches) {
+      const IGNORED = ["facebook.com","fb.com","instagram.com","messenger.com","whatsapp.com","twitter.com","x.com","tiktok.com","youtube.com","google.com","apple.com"];
+      for (const m of matches) {
+        const domain = m.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].toLowerCase();
+        if (!IGNORED.some(d => domain.includes(d))) return m;
+      }
+    }
+    return null;
+  } catch { return null; }
+}
+
+// --- Qualification gate — tracks whether checks have been completed ---
+let qualificationComplete = false;
+
 const INACTIVE_MONTHS = 24;
 async function checkBusinessInactive(page: Page): Promise<{ inactive: boolean; reason: string | null }> {
   try {
@@ -613,6 +638,11 @@ async function gazeAtBox(page: Page, box: { x: number; y: number; width: number;
 // ============================================================================
 
 async function extractEmailFromPage(page: Page): Promise<{ email: string | null; website: string | null }> {
+  // Guard: qualification checks must be complete before email extraction runs
+  if (!qualificationComplete) {
+    console.log(`[${ts()}]   ERROR: extractEmailFromPage called before qualification checks — aborting`);
+    return { email: null, website: null };
+  }
   // 10 second hard timeout — scoped with cleanup to prevent leaking
   let timerId: ReturnType<typeof setTimeout> | null = null;
   const extractionTimer = new Promise<{ email: null; website: null }>((resolve) => {
@@ -812,20 +842,24 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
         return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
       }
 
-      // Step 37: Page load pause
+      // Page load pause
       await humanDelay(page, 800, 2000);
       await checkForPopup(page);
 
-      // Cursor-as-eyes: gaze at page title/name
-      await gazeAt(page, 'h1, [role="heading"]');
-      await humanDelay(page, 500, 1200);
+      // ============================================================
+      // QUALIFICATION — strict enforced order
+      // ============================================================
 
-      // Step 40: Scroll toward Contact/About section
-      await scrollWithInertia(page, randInt(300, 600, "bizScroll"));
-      // Step 41: Cursor gazes at content area while scanning
-      await gazeAt(page, '[role="main"]');
-      await humanDelay(page, 1000, 2500);
+      // 1. WEBSITE CHECK — immediately on page load, before anything else
+      console.log(`[${ts()}]   Checking for website...`);
+      const websiteFound = await checkForWebsite(page);
+      if (websiteFound) {
+        console.log(`[${ts()}]   Has website (${websiteFound}) — skipping`);
+        return { url: page.url(), email: null, website: websiteFound, inactive: false, inactiveReason: null, matchType: "fuzzy", phoneConfirmed: false, matchedPageName: text };
+      }
+      console.log(`[${ts()}]   No website found — proceeding`);
 
+      // 2. PHONE + CITY CONFIRMATION — second
       const phoneOk = await confirmPhoneMatch(page, phone);
       const scrapedCity = await scrapeCityFromPage(page);
       const cityConfirmed = scrapedCity ? scrapedCity.toLowerCase().includes(city.toLowerCase()) || city.toLowerCase().includes(scrapedCity.toLowerCase()) : false;
@@ -834,29 +868,31 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
         console.log(`[${ts()}]   City mismatch — page shows ${scrapedCity}, prospect is ${city} — skipping`);
         return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
       }
-
       if (!phoneOk && !cityConfirmed) {
         console.log(`[${ts()}]   Phone mismatch + city unverified — skipping`);
         return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
       }
-
       if (phoneOk) console.log(`[${ts()}]   Phone confirmed${cityConfirmed ? ", city confirmed" : ""}`);
       else console.log(`[${ts()}]   Phone mismatch but city confirmed (${scrapedCity}) — proceeding with caution`);
 
+      // 3. LAST POST DATE CHECK — third
+      console.log(`[${ts()}]   Checking last post date...`);
       const cleanedPage = fuzzyClean(text, city), cleanedBiz = fuzzyClean(matchName, city);
       const matchType: "exact" | "fuzzy" = cleanedPage === cleanedBiz ? "exact" : "fuzzy";
 
       const { inactive, reason: inactiveReason } = await checkBusinessInactive(page);
-      if (inactive) return { url: page.url(), email: null, website: null, inactive: true, inactiveReason, matchType, phoneConfirmed: phoneOk, matchedPageName: text };
-
-      const { email, website } = await extractEmailFromPage(page);
-
-      // Step 46-47: Skip logic with natural curved path back
-      if (website) {
-        await humanDelay(page, 300, 800); // Eyes confirm website
+      if (inactive) {
+        console.log(`[${ts()}]   ${inactiveReason} — skipping`);
+        return { url: page.url(), email: null, website: null, inactive: true, inactiveReason, matchType, phoneConfirmed: phoneOk, matchedPageName: text };
       }
+      console.log(`[${ts()}]   Active — proceeding to email extraction`);
 
-      return { url: page.url(), email, website, inactive: false, inactiveReason: null, matchType, phoneConfirmed: phoneOk, matchedPageName: text };
+      // 4. EMAIL EXTRACTION — fourth, only after all checks pass
+      qualificationComplete = true;
+      const { email } = await extractEmailFromPage(page);
+      qualificationComplete = false;
+
+      return { url: page.url(), email, website: null, inactive: false, inactiveReason: null, matchType, phoneConfirmed: phoneOk, matchedPageName: text };
     }
   }
 
@@ -1128,6 +1164,7 @@ async function main() {
     }
 
     const prospectStart = Date.now();
+    qualificationComplete = false; // Reset guard for each prospect
     try {
       // Hard 51 second cap per prospect
       const PROSPECT_TIMEOUT_MS = 51000;
