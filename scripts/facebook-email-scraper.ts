@@ -45,59 +45,80 @@ interface WebshareProxy {
   port: number;
   username: string;
   password: string;
-  country_code: string;
-  city_name: string;
 }
 
-let proxyPool: WebshareProxy[] = [];
-let proxyPoolFetchedAt = 0;
-let lastProxyIndex = -1;
-const PROXY_CACHE_MS = 5 * 60 * 1000; // 5 minutes
+let proxyConfig: WebshareProxy | null = null;
 
-async function fetchProxyPool(): Promise<void> {
-  console.log(`[${ts()}] Fetching proxy pool from Webshare...`);
-  const res = await fetch("https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page_size=100", {
+async function fetchProxyConfig(): Promise<void> {
+  console.log(`[${ts()}] Fetching proxy config from Webshare...`);
+
+  // Try rotating residential proxy list first
+  const res = await fetch("https://proxy.webshare.io/api/v2/proxy/list/?mode=rotating&page_size=25", {
     headers: { "Authorization": `Token ${WEBSHARE_API_KEY}` },
   });
-  if (!res.ok) throw new Error(`Webshare API ${res.status}: ${await res.text().catch(() => "")}`);
-  const data = await res.json();
-  const allProxies: WebshareProxy[] = (data.results || []).map((p: Record<string, unknown>) => ({
-    proxy_address: p.proxy_address as string,
-    port: p.port as number,
-    username: p.username as string,
-    password: p.password as string,
-    country_code: p.country_code as string || "",
-    city_name: p.city_name as string || "",
-  }));
 
-  // Filter for US proxies, prefer TX
-  const usProxies = allProxies.filter(p => p.country_code === "US");
-  const txProxies = usProxies.filter(p => p.city_name.toLowerCase().includes("texas") || p.city_name.toLowerCase().includes("tx"));
+  if (res.ok) {
+    const data = await res.json();
+    const results = data.results || [];
 
-  // TX first, then rest of US
-  proxyPool = [...txProxies, ...usProxies.filter(p => !txProxies.includes(p))];
-  if (proxyPool.length === 0) proxyPool = allProxies; // Fallback to any proxy
-  proxyPoolFetchedAt = Date.now();
-  console.log(`[${ts()}] Proxy pool: ${proxyPool.length} proxies (${txProxies.length} TX, ${usProxies.length - txProxies.length} other US)`);
-}
-
-async function getProxy(): Promise<WebshareProxy> {
-  // Refresh pool if stale
-  if (Date.now() - proxyPoolFetchedAt > PROXY_CACHE_MS || proxyPool.length === 0) {
-    await fetchProxyPool();
+    if (results.length > 0) {
+      // Rotating mode returns proxy endpoints — use the first one
+      // Each request through this endpoint gets a different IP automatically
+      const p = results[0];
+      proxyConfig = {
+        proxy_address: p.proxy_address as string,
+        port: p.port as number,
+        username: p.username as string,
+        password: p.password as string,
+      };
+      console.log(`[${ts()}] Rotating proxy: ${proxyConfig.proxy_address}:${proxyConfig.port} (${results.length} endpoints available)`);
+      return;
+    }
   }
-  if (proxyPool.length === 0) throw new Error("No proxies available");
 
-  // Pick random proxy, never same as last
-  let idx: number;
-  do { idx = Math.floor(Math.random() * proxyPool.length); } while (idx === lastProxyIndex && proxyPool.length > 1);
-  lastProxyIndex = idx;
-  return proxyPool[idx];
+  // Fallback: try the proxy config endpoint for residential rotating gateway
+  const cfgRes = await fetch("https://proxy.webshare.io/api/v2/proxy/config/", {
+    headers: { "Authorization": `Token ${WEBSHARE_API_KEY}` },
+  });
+
+  if (cfgRes.ok) {
+    const cfg = await cfgRes.json();
+    if (cfg.proxy_address && cfg.port) {
+      proxyConfig = {
+        proxy_address: cfg.proxy_address,
+        port: cfg.port,
+        username: cfg.username || "",
+        password: cfg.password || "",
+      };
+      console.log(`[${ts()}] Rotating gateway: ${proxyConfig.proxy_address}:${proxyConfig.port}`);
+      return;
+    }
+  }
+
+  // Last fallback: direct mode
+  console.log(`[${ts()}] Rotating not available — falling back to direct proxies`);
+  const directRes = await fetch("https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page_size=25", {
+    headers: { "Authorization": `Token ${WEBSHARE_API_KEY}` },
+  });
+  if (!directRes.ok) throw new Error(`Webshare API ${directRes.status}`);
+  const directData = await directRes.json();
+  const directProxies = directData.results || [];
+  if (directProxies.length === 0) throw new Error("No proxies available from Webshare");
+
+  // Pick a random direct proxy
+  const picked = directProxies[Math.floor(Math.random() * directProxies.length)];
+  proxyConfig = {
+    proxy_address: picked.proxy_address as string,
+    port: picked.port as number,
+    username: picked.username as string,
+    password: picked.password as string,
+  };
+  console.log(`[${ts()}] Direct proxy fallback: ${proxyConfig.proxy_address}:${proxyConfig.port} (${directProxies.length} available)`);
 }
 
-function removeProxy(proxy: WebshareProxy): void {
-  proxyPool = proxyPool.filter(p => p.proxy_address !== proxy.proxy_address || p.port !== proxy.port);
-  console.log(`[${ts()}] Removed failed proxy ${proxy.proxy_address}:${proxy.port} — ${proxyPool.length} remaining`);
+function getProxy(): WebshareProxy {
+  if (!proxyConfig) throw new Error("Proxy not configured — call fetchProxyConfig first");
+  return proxyConfig;
 }
 
 // ============================================================================
@@ -213,13 +234,13 @@ async function main() {
 
   console.log(`[${ts()}] Loaded ${prospects.length} prospects with Facebook URLs\n`);
 
-  // Fetch proxy pool
-  await fetchProxyPool();
+  // Fetch proxy config
+  await fetchProxyConfig();
 
   const browser = await chromium.launch({ headless: false, args: ["--disable-blink-features=AutomationControlled"] });
 
   let emailsFound = 0, emailsSaved = 0, skipped = 0, errors = 0, websiteSkipped = 0;
-  let consecutiveProxyFailures = 0;
+  let consecutiveFailures = 0;
 
   // Session report
   const reportsDir = path.resolve("scripts/session-reports");
@@ -276,7 +297,7 @@ async function main() {
         await page.goto(candidate.facebook_url, { waitUntil: "domcontentloaded", timeout: 15000 });
         await page.waitForTimeout(2000);
 
-        consecutiveProxyFailures = 0; // Reset on successful navigation
+        consecutiveFailures = 0; // Reset on successful navigation
 
         // Check for login wall
         if (page.url().includes("/login")) {
@@ -334,14 +355,13 @@ async function main() {
         const isProxyFailure = errMsg.includes("ERR_PROXY") || errMsg.includes("ECONNREFUSED") || errMsg.includes("ETIMEDOUT") || errMsg.includes("net::ERR");
 
         if (isProxyFailure) {
-          consecutiveProxyFailures++;
-          console.log(`[${ts()}]   Proxy failed (${proxy!.proxy_address}) — ${errMsg.substring(0, 80)}`);
-          removeProxy(proxy!);
+          consecutiveFailures++;
+          console.log(`[${ts()}]   Proxy failed — ${errMsg.substring(0, 80)}`);
 
-          if (consecutiveProxyFailures >= 3) {
-            console.log(`[${ts()}]   3 consecutive proxy failures — refreshing pool`);
-            try { await fetchProxyPool(); } catch { /* continue with what we have */ }
-            consecutiveProxyFailures = 0;
+          if (consecutiveFailures >= 3) {
+            console.log(`[${ts()}]   3 consecutive failures — refreshing proxy config`);
+            try { await fetchProxyConfig(); } catch { /* continue with current */ }
+            consecutiveFailures = 0;
           }
         } else {
           console.log(`[${ts()}]   Error: ${errMsg.substring(0, 120)}`);
@@ -356,7 +376,7 @@ async function main() {
 
     // Progress every 50
     if ((i + 1) % 50 === 0) {
-      console.log(`\n[${ts()}] [Progress] ${i + 1}/${prospects.length} | Emails: ${emailsFound} | Saved: ${emailsSaved} | Website skipped: ${websiteSkipped} | Skipped: ${skipped} | Errors: ${errors} | Proxies: ${proxyPool.length}\n`);
+      console.log(`\n[${ts()}] [Progress] ${i + 1}/${prospects.length} | Emails: ${emailsFound} | Saved: ${emailsSaved} | Website skipped: ${websiteSkipped} | Skipped: ${skipped} | Errors: ${errors}\n`);
     }
   }
 
