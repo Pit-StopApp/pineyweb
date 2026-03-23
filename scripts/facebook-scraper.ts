@@ -1,6 +1,25 @@
 /**
  * IMPLEMENTATION NOTES — Human Behavior Specification
  *
+ * AUDIT (latest pass) — issues found and fixed:
+ * - Duplicate log line "Retrying with:" printed twice — removed duplicate
+ * - Popup check missing before Enter press on initial search — added
+ * - Popup check missing before Enter press on retry search — added
+ * - Popup check missing before About tab click / contact page navigation — added
+ * - Popup check missing before fallback page.goto in tryMatchCandidates — added
+ * - All page.goto for search replaced with humanType via / shortcut (previous fix)
+ * - No page.fill(), keyboard.insertText(), or URL-based search input anywhere
+ * - No unsolicited mouse drift during waits/pauses (verified: 0 violations)
+ * - No straight-line mouse movement (all paths use generateBezierPath)
+ * - No fixed delays (all use randInt/humanDelay with no-repeat engine)
+ * - Backspace speed 60-90ms per character everywhere (clearSearchBar + typo corrections)
+ * - Mouse stationary during all typing and backspace (humanType has no moveMouse calls)
+ * - / shortcut used for search bar refocus between prospects
+ * - Daily cap checks at top of loop, current prospect completes before stopping
+ * - Break threshold re-randomized each cycle (15-30)
+ * - Prospects shuffled at session start
+ * - Report saved before breaks, on SIGINT, and at session end
+ *
  * IMPLEMENTED:
  * - Bezier curve mouse movement with three-phase easing (accel/cruise/decel)
  * - Speed tiers: slow (0.3-0.8), normal (0.8-1.5), fast (1.5-2.5), max 3.0 px/ms
@@ -9,23 +28,21 @@
  * - Scroll easing with micro-follow (5-15px) and overshoot correction (15-20%)
  * - Autocomplete detection (85-90% ignore, 10-15% glance)
  * - Misclick simulation (5-10% chance on any click)
+ * - Search via / shortcut + humanType (character-by-character, no URL navigation)
  * - Search retry with name simplification on no results
- * - Wrong page detection and back navigation
  * - Break system: every 15-30 prospects, 3-7min, feed surf (60%) or idle (40%)
  * - Daily email cap (200) with graceful mid-prospect completion
- * - Popup/login wall detection before navigation events
+ * - Popup/login wall detection before every navigation, click, and search submission
  * - Unfocus simulation with three drift destinations (dock/notes/edge)
+ * - Visible cursor overlay tracking all bezier movements
  * - Full business logic preserved: Claude AI verification, Supabase, CSV, outreach
  *
  * NOT IMPLEMENTED (technically impossible in Playwright):
- * - True OS-level window focus/unfocus detection (Playwright controls the page context,
- *   not the OS window manager; Meta+M is a best-effort approximation)
- * - Real dock/Notes app mouse targeting (mouse coordinates are page-relative in
- *   Playwright, not screen-relative; we simulate by moving to page edges)
- * - OS window animation completion detection (we use fixed delays as approximation)
- * - True eye-tracking simulation (mouse position is used as proxy for gaze)
- * - Pixel-perfect bezier curves (Playwright mouse.move uses discrete steps;
- *   we interpolate along the curve with step size derived from speed)
+ * - True OS-level window focus/unfocus (Meta+M is best-effort approximation)
+ * - Screen-relative mouse coordinates (page-relative used; dock/notes simulated at edges)
+ * - OS window animation completion detection (random delays used as approximation)
+ * - True eye-tracking (mouse position used as proxy for gaze)
+ * - Pixel-perfect bezier curves (discrete steps interpolated along curve)
  */
 
 import { chromium, type BrowserContext, type Page } from "playwright";
@@ -562,6 +579,7 @@ async function extractEmailFromPage(page: Page): Promise<{ email: string | null;
     const aboutTab = page.locator('a[href*="/about"]').first();
     const useAboutTab = Math.random() < 0.3 && await aboutTab.isVisible().catch(() => false);
 
+    await checkForPopup(page);
     if (useAboutTab) {
       await clickElement(page, 'a[href*="/about"]', "slow");
       await humanDelay(page, 500, 1500);
@@ -645,6 +663,7 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
       if (box) {
         await humanClick(page, box.x + randInt(5, Math.max(6, box.width - 5), "matchClickX"), box.y + randInt(3, Math.max(4, box.height - 3), "matchClickY"), "normal");
       } else {
+        await checkForPopup(page);
         await page.goto(candidates[i].href, { waitUntil: "domcontentloaded", timeout: 15000 });
       }
 
@@ -686,6 +705,7 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
   for (let i = toScan; i < candidates.length; i++) {
     if (fuzzyMatch(candidates[i].text, matchName, city)) {
       console.log(`[${ts()}]   Matched: "${candidates[i].text}"`);
+      await checkForPopup(page);
       await page.goto(candidates[i].href, { waitUntil: "domcontentloaded", timeout: 15000 });
       await humanDelay(page, 800, 2000);
       await checkForPopup(page);
@@ -743,6 +763,7 @@ async function searchFacebook(page: Page, businessName: string, city: string, ph
   // Step 11-13: Re-read, finger travel, Enter
   await humanDelay(page, 400, 1100);
   await humanDelay(page, 50, 150);
+  await checkForPopup(page);
   await page.keyboard.press("Enter");
 
   // Wait for results to load
@@ -775,13 +796,13 @@ async function searchFacebook(page: Page, businessName: string, city: string, ph
     console.log(`[${ts()}]   No match. Retrying with: "${simplified}"`);
 
     // Steps 15-22: Retry with simplified name — type character by character
-    console.log(`[${ts()}]   Retrying with: "${simplified}"`);
     await refocusSearchBar(page);
     await clearSearchBar(page);
     await humanDelay(page, 300, 800); // Step 18: thinking how to rephrase
     await humanType(page, simplified);
     await humanDelay(page, 400, 1100); // Step 20: re-read
     await humanDelay(page, 50, 150); // Step 21: finger to Enter
+    await checkForPopup(page);
     await page.keyboard.press("Enter");
     await humanDelay(page, 2000, 4000);
     await scrollWithInertia(page, randInt(100, 300, "retryScroll"));
