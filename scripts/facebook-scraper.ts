@@ -161,7 +161,7 @@ let mouseY = 400;
 
 async function moveMouse(page: Page, targetX: number, targetY: number, tier: SpeedTier = "normal") {
   const [sMin, sMax] = SPEED_RANGES[tier];
-  const cruiseSpeed = Math.min(rand(sMin, sMax, "speed"), 3.0); // Never exceed 3.0 px/ms
+  const cruiseSpeed = Math.min(rand(sMin, sMax, "speed"), 3.0);
   const path = generateBezierPath({ x: mouseX, y: mouseY }, { x: targetX, y: targetY });
 
   const accelEnd = Math.floor(path.length * rand(0.2, 0.3, "accelPhase"));
@@ -169,8 +169,39 @@ async function moveMouse(page: Page, targetX: number, targetY: number, tier: Spe
   const startSpeed = rand(0.2, 0.4, "startSpeed");
   const endSpeed = rand(0.3, 0.5, "endSpeed");
 
+  // Mid-path course correction: 10-15% chance of 3-8px deviation around 40-60% mark
+  const hasCourseCorrection = Math.random() < rand(0.10, 0.15, "courseCorr");
+  const correctionStart = Math.floor(path.length * rand(0.4, 0.5, "corrStart"));
+  const correctionPeak = Math.floor(path.length * rand(0.5, 0.6, "corrPeak"));
+  const correctionOffX = hasCourseCorrection ? rand(-8, 8, "corrOffX") : 0;
+  const correctionOffY = hasCourseCorrection ? rand(-8, 8, "corrOffY") : 0;
+
   for (let i = 1; i < path.length; i++) {
-    const segDist = Math.sqrt((path[i].x - path[i - 1].x) ** 2 + (path[i].y - path[i - 1].y) ** 2);
+    let ptX = path[i].x;
+    let ptY = path[i].y;
+
+    // 1. Micro tremors: 1-3px jitter on each axis, different every step
+    ptX += rand(-3, 3, `tremX${i}`);
+    ptY += rand(-3, 3, `tremY${i}`);
+
+    // 3. Mid-path course correction: gradual deviation then correction
+    if (hasCourseCorrection) {
+      if (i >= correctionStart && i <= correctionPeak) {
+        const t = (i - correctionStart) / Math.max(1, correctionPeak - correctionStart);
+        ptX += correctionOffX * t;
+        ptY += correctionOffY * t;
+      } else if (i > correctionPeak) {
+        const remaining = path.length - correctionPeak;
+        const t = 1 - (i - correctionPeak) / Math.max(1, remaining);
+        ptX += correctionOffX * t;
+        ptY += correctionOffY * t;
+      }
+    }
+
+    const prevX = i === 1 ? mouseX : path[i - 1].x;
+    const prevY = i === 1 ? mouseY : path[i - 1].y;
+    const segDist = Math.sqrt((ptX - prevX) ** 2 + (ptY - prevY) ** 2);
+
     let speed: number;
     if (i < accelEnd) {
       const t = i / accelEnd;
@@ -179,11 +210,14 @@ async function moveMouse(page: Page, targetX: number, targetY: number, tier: Spe
       const t = (i - decelStart) / (path.length - decelStart);
       speed = cruiseSpeed - (cruiseSpeed - endSpeed) * t;
     } else {
-      speed = cruiseSpeed;
+      // 2. Speed wobble: ±10-15% fluctuation during cruise phase
+      const wobble = 1 + rand(-0.15, 0.15, `wobble${i}`);
+      speed = cruiseSpeed * wobble;
     }
     speed = Math.min(speed, 3.0);
     const delay = Math.max(1, Math.round(segDist / speed));
-    const px = Math.round(path[i].x), py = Math.round(path[i].y);
+
+    const px = Math.round(ptX), py = Math.round(ptY);
     await page.mouse.move(px, py);
     await updateCursorPosition(page, px, py);
     if (delay > 1) await page.waitForTimeout(delay);
@@ -202,6 +236,10 @@ async function humanDelay(page: Page, min: number, max: number) {
 }
 
 async function humanClick(page: Page, x: number, y: number, tier: SpeedTier = "normal") {
+  // 4. Sub-pixel landing offset: 1-3px, never zero, never same twice
+  const landOffX = randInt(1, 3, "landX") * (Math.random() < 0.5 ? -1 : 1);
+  const landOffY = randInt(1, 3, "landY") * (Math.random() < 0.5 ? -1 : 1);
+
   // 5-10% misclick chance
   if (Math.random() < rand(0.05, 0.10, "misclick")) {
     const offX = x + randInt(-15, 15, "misX");
@@ -210,13 +248,13 @@ async function humanClick(page: Page, x: number, y: number, tier: SpeedTier = "n
     await page.mouse.click(offX, offY);
     await humanDelay(page, 50, 150); // reaction time
     await humanDelay(page, 200, 600); // confused pause
-    // Correct
+    // Correct — with landing offset
     await moveMouse(page, x, y, tier);
-    await page.mouse.click(x, y);
+    await page.mouse.click(x + landOffX, y + landOffY);
   } else {
     await moveMouse(page, x, y, tier);
     await humanDelay(page, 50, 150); // minimum reaction before click
-    await page.mouse.click(x, y);
+    await page.mouse.click(x + landOffX, y + landOffY);
   }
 }
 
