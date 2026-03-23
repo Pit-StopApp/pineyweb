@@ -196,17 +196,19 @@ async function extractFromFacebookPage(page: Page): Promise<{ email: string | nu
 async function main() {
   console.log(`[${ts()}] Phase 2 — Facebook Email Scraper with Rotating Proxies\n`);
 
-  // Fetch prospects with facebook candidates but no email yet
-  const { data: prospects, error } = await supabase
+  // Fetch prospects that have candidates but no email yet
+  // Query: has facebook_url set (from Phase 1) + email is null
+  console.log(`[${ts()}] Querying prospects with facebook_url but no email...`);
+  const { data: prospects, error, count } = await supabase
     .from("pineyweb_prospects")
-    .select("id, place_id, business_name, city, phone, rating, review_count, priority_tier")
-    .eq("facebook_found", true)
+    .select("id, place_id, business_name, city, phone, rating, review_count, priority_tier", { count: "exact" })
     .is("email", null)
     .not("facebook_url", "is", null)
     .order("priority_tier", { ascending: true })
     .order("rating", { ascending: false });
 
   if (error) { console.error("Supabase error:", error.message); process.exit(1); }
+  console.log(`[${ts()}] Query returned ${count ?? prospects?.length ?? 0} rows`);
   if (!prospects?.length) { console.log("No prospects to process"); return; }
 
   console.log(`[${ts()}] Loaded ${prospects.length} prospects with Facebook URLs\n`);
