@@ -122,21 +122,48 @@ function cubicBezier(t: number, p0: number, p1: number, p2: number, p3: number):
 function generateBezierPath(start: Point, end: Point): Point[] {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
-  // Control points offset perpendicular to the line for curve
+  const dist = Math.sqrt(dx * dx + dy * dy);
   const perpX = -dy;
   const perpY = dx;
-  const curvature1 = rand(-0.3, 0.3, "curve1");
-  const curvature2 = rand(-0.3, 0.3, "curve2");
-  const cp1: Point = {
-    x: start.x + dx * rand(0.2, 0.4, "cp1t") + perpX * curvature1,
-    y: start.y + dy * rand(0.2, 0.4, "cp1t2") + perpY * curvature1,
-  };
-  const cp2: Point = {
-    x: start.x + dx * rand(0.6, 0.8, "cp2t") + perpX * curvature2,
-    y: start.y + dy * rand(0.6, 0.8, "cp2t2") + perpY * curvature2,
-  };
 
-  const dist = Math.sqrt(dx * dx + dy * dy);
+  // Generate control points with guaranteed minimum 5-degree deviation
+  // from a straight line. Reroll if path falls within 176-184 degrees.
+  const MIN_DEVIATION_RAD = 5 * Math.PI / 180; // 5 degrees
+  let cp1: Point, cp2: Point;
+  let attempts = 0;
+  do {
+    const curvature1 = rand(-0.3, 0.3, "curve1");
+    const curvature2 = rand(-0.3, 0.3, "curve2");
+    cp1 = {
+      x: start.x + dx * rand(0.2, 0.4, "cp1t") + perpX * curvature1,
+      y: start.y + dy * rand(0.2, 0.4, "cp1t2") + perpY * curvature1,
+    };
+    cp2 = {
+      x: start.x + dx * rand(0.6, 0.8, "cp2t") + perpX * curvature2,
+      y: start.y + dy * rand(0.6, 0.8, "cp2t2") + perpY * curvature2,
+    };
+    attempts++;
+
+    // Check deviation: measure angle from start→cp1 vs start→end
+    if (dist < 5) break; // Very short distances are exempt
+    const toCP1x = cp1.x - start.x, toCP1y = cp1.y - start.y;
+    const toEndx = end.x - start.x, toEndy = end.y - start.y;
+    const dot = toCP1x * toEndx + toCP1y * toEndy;
+    const magCP1 = Math.sqrt(toCP1x * toCP1x + toCP1y * toCP1y);
+    const magEnd = Math.sqrt(toEndx * toEndx + toEndy * toEndy);
+    if (magCP1 < 0.001 || magEnd < 0.001) break;
+    const cosAngle = Math.min(1, Math.max(-1, dot / (magCP1 * magEnd)));
+    const angle = Math.acos(cosAngle);
+    if (angle >= MIN_DEVIATION_RAD) break; // Sufficient deviation
+  } while (attempts < 10);
+
+  // If still too straight after 10 attempts, force minimum perpendicular offset
+  if (attempts >= 10 && dist >= 5) {
+    const forceOffset = dist * 0.05 * (Math.random() < 0.5 ? 1 : -1);
+    cp1.x += perpX * forceOffset / Math.max(1, dist);
+    cp1.y += perpY * forceOffset / Math.max(1, dist);
+  }
+
   const steps = Math.max(8, Math.round(dist / 5));
   const points: Point[] = [];
   for (let i = 0; i <= steps; i++) {
@@ -180,9 +207,11 @@ async function moveMouse(page: Page, targetX: number, targetY: number, tier: Spe
     let ptX = path[i].x;
     let ptY = path[i].y;
 
-    // 1. Micro tremors: 1-3px jitter on each axis, different every step
-    ptX += rand(-3, 3, `tremX${i}`);
-    ptY += rand(-3, 3, `tremY${i}`);
+    // 1. Micro tremors: 0.3-0.8px jitter, only every 3rd or 4th step
+    if (i % randInt(3, 4, `tremFreq${i}`) === 0) {
+      ptX += rand(-0.8, 0.8, `tremX${i}`);
+      ptY += rand(-0.8, 0.8, `tremY${i}`);
+    }
 
     // 3. Mid-path course correction: gradual deviation then correction
     if (hasCourseCorrection) {
