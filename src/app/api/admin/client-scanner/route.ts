@@ -76,8 +76,9 @@ export async function POST(req: NextRequest) {
       });
       apiCalls++;
 
-      if (!res.ok) continue;
+      if (!res.ok) { console.log(`[ClientScanner] ${query}: HTTP ${res.status}`); continue; }
       const data = await res.json();
+      console.log(`[ClientScanner] "${query}": ${data.places?.length || 0} raw results`);
 
       for (const raw of (data.places || [])) {
         const place = mapPlace(raw);
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest) {
         seen.add(place.place_id);
 
         // Apply filters
-        if (place.review_count < config.maxResultsPerRun && place.review_count < 5) continue;
+        if (place.review_count < 5) continue;
         if (config.requireWebsite && !place.website_url) continue;
         if (!config.requireWebsite && place.website_url) continue;
         if (config.chains.has(place.business_name.trim())) continue;
