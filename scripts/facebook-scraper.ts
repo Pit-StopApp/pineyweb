@@ -45,8 +45,12 @@
  * - Pixel-perfect bezier curves (discrete steps interpolated along curve)
  */
 
-import { chromium, type BrowserContext, type Page } from "playwright";
+import { chromium } from "playwright-extra";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
+import { type BrowserContext, type Page } from "playwright";
 import { createClient } from "@supabase/supabase-js";
+
+chromium.use(StealthPlugin());
 import * as fs from "fs";
 import * as path from "path";
 
@@ -1049,11 +1053,32 @@ async function main() {
 
   const vpW = randInt(1280, 1480, "vpW"), vpH = randInt(800, 1000, "vpH");
 
+  let stealthVerified = false;
   async function launchBrowser() {
     const b = await chromium.launch({ headless: false, args: ["--disable-blink-features=AutomationControlled"] });
     const ctx = await b.newContext({ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", viewport: { width: vpW, height: vpH } });
     const pg = await ctx.newPage();
     pg.on("load", () => { injectCursorOverlay(pg).catch(() => {}); });
+
+    // Verify stealth on first launch only
+    if (!stealthVerified) {
+      try {
+        await pg.goto("https://bot.sannysoft.com", { waitUntil: "domcontentloaded", timeout: 15000 });
+        await pg.waitForTimeout(3000);
+        const webdriver = await pg.evaluate(() => (navigator as unknown as Record<string, unknown>).webdriver);
+        console.log(`[${ts()}] Stealth check: navigator.webdriver = ${webdriver}`);
+        if (webdriver === false || webdriver === undefined) {
+          console.log(`[${ts()}] ✓ Stealth plugin active — bot fingerprints masked`);
+        } else {
+          console.log(`[${ts()}] ⚠ Stealth may not be working — webdriver = ${webdriver}`);
+        }
+        stealthVerified = true;
+      } catch (err) {
+        console.log(`[${ts()}] Stealth check skipped: ${err instanceof Error ? err.message : err}`);
+        stealthVerified = true;
+      }
+    }
+
     await loadOrCreateSession(ctx, pg);
     await injectCursorOverlay(pg);
     return { browser: b, context: ctx, page: pg };
