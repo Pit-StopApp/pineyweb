@@ -472,7 +472,7 @@ function fuzzyClean(s: string, city?: string): string {
 }
 
 // Words too common to be sole basis for a match
-const SOLE_MATCH_BLACKLIST = new Set(["smith","auto","hair","fitness","electric","repair","center","care","family","texas","tx","services","solutions","chris","first","new","custom","pro","american","national","quality","home","west","east","north","south"]);
+const SOLE_MATCH_BLACKLIST = new Set(["smith","auto","hair","fitness","electric","repair","center","care","family","texas","tx","services","solutions","heating","air","roofing","salon","barber","nails","beauty","spa","plumbing","chris","first","new","custom","pro","american","national","quality","home","west","east","north","south"]);
 
 function fuzzyMatch(pageName: string, businessName: string, city?: string): boolean {
   const a = fuzzyClean(pageName, city), b = fuzzyClean(businessName, city);
@@ -867,7 +867,8 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
 
 async function searchFacebook(page: Page, businessName: string, city: string, phone: string | null): Promise<SearchResult> {
   const humanQuery = humanizeQuery(businessName, city);
-  const searchUrl = `https://www.facebook.com/search/pages/?q=${encodeURIComponent(humanQuery)}`;
+  const txFilter = encodeURIComponent('{"page_location":{"name":"location","args":"Texas"}}');
+  const searchUrl = `https://www.facebook.com/search/pages/?q=${encodeURIComponent(humanQuery)}&filters=${txFilter}`;
 
   // Navigate directly to search results URL
   await checkForPopup(page);
@@ -924,7 +925,7 @@ async function searchFacebook(page: Page, businessName: string, city: string, ph
     console.log(`[${ts()}]   No match. Retrying with: "${simplified}"`);
 
     // Navigate directly to retry search URL
-    const retryUrl = `https://www.facebook.com/search/pages/?q=${encodeURIComponent(simplified)}`;
+    const retryUrl = `https://www.facebook.com/search/pages/?q=${encodeURIComponent(simplified)}&filters=${txFilter}`;
     await checkForPopup(page);
     await page.goto(retryUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
     await humanDelay(page, 2000, 4000);
