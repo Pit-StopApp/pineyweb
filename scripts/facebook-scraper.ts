@@ -846,7 +846,7 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
         return { url: null, email: null, website: null, inactive: false, inactiveReason: null, matchType: "no_match", phoneConfirmed: false, matchedPageName: "" };
       }
 
-      // Page load pause
+      // MOUSE FROZEN — no movement until website check completes
       await humanDelay(page, 800, 2000);
       await checkForPopup(page);
 
@@ -855,6 +855,7 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
       // ============================================================
 
       // 1. WEBSITE CHECK — immediately on page load, before anything else
+      // No gazeAt, no scroll, no mouse movement before this completes
       console.log(`[${ts()}]   Checking for website...`);
       const websiteFound = await checkForWebsite(page);
       if (websiteFound) {
@@ -862,6 +863,12 @@ async function tryMatchCandidates(page: Page, candidates: { text: string; href: 
         return { url: page.url(), email: null, website: websiteFound, inactive: false, inactiveReason: null, matchType: "fuzzy", phoneConfirmed: false, matchedPageName: text };
       }
       console.log(`[${ts()}]   No website found — proceeding`);
+
+      // Mouse unfreezes — gaze at page title now that website check passed
+      await gazeAt(page, 'h1, [role="heading"]');
+      await humanDelay(page, 500, 1200);
+      await scrollWithInertia(page, randInt(300, 600, "bizScroll"));
+      await humanDelay(page, 800, 1500);
 
       // 2. NAME SCORE + PHONE + CITY — match hierarchy
       const nameScore = fuzzyMatchScore(text, matchName, city);
