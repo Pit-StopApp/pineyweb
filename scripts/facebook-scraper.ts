@@ -264,24 +264,59 @@ async function clearSearchBar(page: Page) {
 // ============================================================================
 
 async function checkForPopup(page: Page): Promise<boolean> {
-  const hasModal = await page.evaluate(() => {
-    const dialogs = document.querySelectorAll('[role="dialog"], [aria-modal="true"]');
-    const loginForm = document.querySelector('form[action*="login"]');
-    const loginUrl = window.location.pathname.includes("/login");
-    return dialogs.length > 0 || !!loginForm || loginUrl;
+  const isBlocked = await page.evaluate(() => {
+    // Only trigger on genuinely visible, blocking modals
+    // 1. Login wall URL
+    if (window.location.pathname.includes("/login")) return true;
+
+    // 2. Visible login form covering the page
+    const loginForms = document.querySelectorAll('form[action*="login"]');
+    for (const form of loginForms) {
+      const rect = form.getBoundingClientRect();
+      const style = window.getComputedStyle(form);
+      if (rect.width > 200 && rect.height > 100 && style.display !== "none" && style.visibility !== "hidden" && parseFloat(style.opacity) > 0.5) return true;
+    }
+
+    // 3. Visible blocking overlay — must be large, visible, and on top
+    const candidates = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+    for (const el of candidates) {
+      const rect = el.getBoundingClientRect();
+      const style = window.getComputedStyle(el);
+      const isVisible = rect.width > 300 && rect.height > 200
+        && style.display !== "none"
+        && style.visibility !== "hidden"
+        && parseFloat(style.opacity) > 0.5
+        && rect.top >= 0 && rect.left >= 0;
+      if (!isVisible) continue;
+
+      // Check if it contains login/verification keywords
+      const text = (el.textContent || "").toLowerCase();
+      if (text.includes("log in") || text.includes("sign in") || text.includes("log into")
+        || text.includes("verify your") || text.includes("confirm your identity")
+        || text.includes("enter the code") || text.includes("check your email")) {
+        return true;
+      }
+    }
+
+    return false;
   }).catch(() => false);
 
-  if (hasModal) {
+  if (isBlocked) {
     console.log(`[${ts()}]   Manual intervention required — waiting for you to dismiss the prompt`);
     await page.bringToFront();
-    // Wait indefinitely until prompt is gone
     await page.waitForFunction(() => {
-      const dialogs = document.querySelectorAll('[role="dialog"], [aria-modal="true"]');
-      const loginForm = document.querySelector('form[action*="login"]');
-      const loginUrl = window.location.pathname.includes("/login");
-      return dialogs.length === 0 && !loginForm && !loginUrl;
+      if (window.location.pathname.includes("/login")) return false;
+      const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+      for (const el of dialogs) {
+        const rect = el.getBoundingClientRect();
+        const style = window.getComputedStyle(el);
+        if (rect.width > 300 && rect.height > 200 && style.display !== "none" && style.visibility !== "hidden" && parseFloat(style.opacity) > 0.5) {
+          const text = (el.textContent || "").toLowerCase();
+          if (text.includes("log in") || text.includes("sign in") || text.includes("verify your") || text.includes("confirm your identity")) return false;
+        }
+      }
+      return true;
     }, { timeout: 0 });
-    // Reorientation pause
     await humanDelay(page, 1000, 3000);
     return true;
   }
